@@ -1,34 +1,37 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from "vue";
-import {
-  cancelVariableDialog,
-  confirmVariableDialog,
-  store,
-} from "../store";
+import { nextTick, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
 
-const dialog = computed(() => store.variableDialog);
+// Reusable template-variable dialog. Driven purely by props/emits so the
+// main window, the future launcher and the edge dock can all use it without
+// sharing main-window store state.
+const props = defineProps<{
+  title: string;
+  variables: string[];
+}>();
+
+const emit = defineEmits<{
+  (e: "confirm", values: Record<string, string>): void;
+  (e: "cancel"): void;
+}>();
+
+const { t } = useI18n();
 const container = ref<HTMLElement | null>(null);
 const values = reactive<Record<string, string>>({});
 
-// Reset values and focus the first input each time a dialog opens.
-watch(
-  () => dialog.value?.id,
-  async (id) => {
-    for (const key of Object.keys(values)) delete values[key];
-    if (id !== undefined) {
-      for (const name of dialog.value?.variables ?? []) values[name] = "";
-      await nextTick();
-      container.value?.querySelector("input")?.focus();
-    }
-  },
-);
+for (const name of props.variables) values[name] = "";
+
+onMounted(async () => {
+  await nextTick();
+  container.value?.querySelector("input")?.focus();
+});
 
 function onConfirm(): void {
-  void confirmVariableDialog({ ...values });
+  emit("confirm", { ...values });
 }
 
 function onCancel(): void {
-  cancelVariableDialog();
+  emit("cancel");
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -44,17 +47,12 @@ function onKeydown(e: KeyboardEvent): void {
 </script>
 
 <template>
-  <div
-    v-if="dialog"
-    class="overlay"
-    @mousedown.self="onCancel"
-    @keydown="onKeydown"
-  >
+  <div class="overlay" @mousedown.self="onCancel" @keydown="onKeydown">
     <div ref="container" class="dialog">
-      <h2 class="title">{{ dialog.title }}</h2>
-      <p class="subtitle">Fill template variables</p>
+      <h2 class="title">{{ props.title }}</h2>
+      <p class="subtitle">{{ t("dialog.fillVariables") }}</p>
 
-      <label v-for="name in dialog.variables" :key="name" class="field">
+      <label v-for="name in props.variables" :key="name" class="field">
         <span class="name">{{ name }}</span>
         <input
           v-model="values[name]"
@@ -65,8 +63,8 @@ function onKeydown(e: KeyboardEvent): void {
       </label>
 
       <div class="actions">
-        <button class="btn primary" @click="onConfirm">Copy</button>
-        <button class="btn" @click="onCancel">Cancel</button>
+        <button class="btn primary" @click="onConfirm">{{ t("dialog.copy") }}</button>
+        <button class="btn" @click="onCancel">{{ t("dialog.cancel") }}</button>
       </div>
     </div>
   </div>

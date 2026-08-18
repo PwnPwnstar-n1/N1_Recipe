@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { closeEditor, saveSnippet, store } from "../store";
 import { SNIPPET_TYPES, type SnippetType } from "../types";
+
+const { t } = useI18n();
 
 const form = reactive({
   title: "",
@@ -54,7 +57,7 @@ function splitCsv(value: string): string[] {
 
 async function onSave(): Promise<void> {
   if (!form.title.trim()) {
-    error.value = "Title is required";
+    error.value = t("errors.titleRequired");
     return;
   }
   await saveSnippet({
@@ -78,27 +81,27 @@ function onKeydown(e: KeyboardEvent): void {
 
 <template>
   <div class="editor" @keydown="onKeydown">
-    <h2 class="head">{{ isEdit() ? "Edit Snippet" : "New Snippet" }}</h2>
+    <h2 class="head">{{ isEdit() ? t("editor.editTitle") : t("editor.newTitle") }}</h2>
 
     <label class="field">
-      <span class="label">Title *</span>
-      <input v-model="form.title" type="text" placeholder="e.g. ret2libc EXP Template" />
+      <span class="label">{{ t("editor.title") }}</span>
+      <input v-model="form.title" type="text" :placeholder="t('editor.titlePlaceholder')" />
     </label>
 
     <div class="row">
       <label class="field">
-        <span class="label">Type</span>
+        <span class="label">{{ t("editor.type") }}</span>
         <select v-model="form.type">
-          <option v-for="t in SNIPPET_TYPES" :key="t" :value="t">{{ t }}</option>
+          <option v-for="type in SNIPPET_TYPES" :key="type" :value="type">{{ type }}</option>
         </select>
       </label>
       <label class="field grow">
-        <span class="label">Category</span>
+        <span class="label">{{ t("editor.category") }}</span>
         <input
           v-model="form.category"
           type="text"
           list="category-options"
-          placeholder="e.g. Security/Pwn"
+          :placeholder="t('editor.categoryPlaceholder')"
         />
         <datalist id="category-options">
           <option v-for="c in store.categories" :key="c.name" :value="c.name" />
@@ -107,35 +110,35 @@ function onKeydown(e: KeyboardEvent): void {
     </div>
 
     <label class="field">
-      <span class="label">Language</span>
-      <input v-model="form.language" type="text" placeholder="python / bash / markdown …" />
+      <span class="label">{{ t("editor.language") }}</span>
+      <input v-model="form.language" type="text" :placeholder="t('editor.languagePlaceholder')" />
     </label>
 
     <div class="row">
       <label class="field grow">
-        <span class="label">Tags (comma separated)</span>
-        <input v-model="form.tags" type="text" placeholder="pwn, pwntools" />
+        <span class="label">{{ t("editor.tags") }}</span>
+        <input v-model="form.tags" type="text" :placeholder="t('editor.tagsPlaceholder')" />
       </label>
       <label class="field grow">
-        <span class="label">Aliases (comma separated)</span>
-        <input v-model="form.aliases" type="text" placeholder="rtl, ret2libc" />
+        <span class="label">{{ t("editor.aliases") }}</span>
+        <input v-model="form.aliases" type="text" :placeholder="t('editor.aliasesPlaceholder')" />
       </label>
     </div>
 
     <label class="field grow">
-      <span class="label">Content</span>
+      <span class="label">{{ t("editor.content") }}</span>
       <textarea
         v-model="form.content"
         spellcheck="false"
-        placeholder="Paste your snippet content here…"
+        :placeholder="t('editor.contentPlaceholder')"
       ></textarea>
     </label>
 
     <p v-if="error" class="error">{{ error }}</p>
 
     <div class="actions">
-      <button class="btn primary" @click="onSave">Save (Ctrl+S)</button>
-      <button class="btn" @click="closeEditor">Cancel (Esc)</button>
+      <button class="btn primary" @click="onSave">{{ t("editor.save") }}</button>
+      <button class="btn" @click="closeEditor">{{ t("editor.cancel") }}</button>
     </div>
   </div>
 </template>

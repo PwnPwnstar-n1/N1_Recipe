@@ -30,6 +30,10 @@ fn setup() -> (MockApp, MockWebview) {
             commands::copy_snippet,
             commands::list_variables,
             commands::list_categories,
+            commands::get_settings,
+            commands::set_language,
+            commands::show_launcher,
+            commands::hide_launcher,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build mock app");
@@ -380,4 +384,43 @@ fn template_dialog_cancel_contract_no_copy_invocation() {
     let snippet = invoke(&webview, "get_snippet", json!({ "id": id })).expect("get failed");
     assert_eq!(snippet["usageCount"], 0);
     assert!(snippet["lastUsedAt"].is_null());
+}
+
+// ---------------------------------------------------------------------------
+// Window lifecycle (multi-window foundation)
+// ---------------------------------------------------------------------------
+
+// Note: get_settings/set_language are deliberately not tested at IPC level —
+// the mock runtime's path resolver would read/write the REAL
+// settings.json. The settings module itself is unit-tested, and the real
+// persistence flow is covered by runtime verification.
+
+
+#[test]
+fn launcher_lifecycle_commands_wiring() {
+    // Command-wiring test. The mock runtime's window ops are stubs (hide()
+    // is a no-op), so visibility cannot be observed here; the REAL
+    // show/hide lifecycle is verified at runtime via CDP.
+    //
+    // There is deliberately NO destroy/recreate command: creating a webview
+    // from an IPC/sync-command thread deadlocks on Windows (upstream wry
+    // issue), so the launcher window is created once at startup and only
+    // shown/hidden — see src/windows.rs.
+    let (app, webview) = setup();
+    let handle = app.handle().clone();
+
+    snipdeck_lib::windows::create_launcher(&handle).expect("failed to create launcher");
+    assert!(
+        snipdeck_lib::windows::get(&handle, snipdeck_lib::windows::roles::LAUNCHER).is_some(),
+        "launcher should exist after creation"
+    );
+
+    invoke(&webview, "show_launcher", json!({})).expect("show_launcher failed");
+    invoke(&webview, "hide_launcher", json!({})).expect("hide_launcher failed");
+
+    // repeated show/hide cycles keep working (no state degradation)
+    for _ in 0..3 {
+        invoke(&webview, "show_launcher", json!({})).expect("show in cycle failed");
+        invoke(&webview, "hide_launcher", json!({})).expect("hide in cycle failed");
+    }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { formatDateTime } from "../format";
 import {
   copySnippet,
@@ -9,6 +10,7 @@ import {
   toggleFavorite,
 } from "../store";
 
+const { t } = useI18n();
 const s = computed(() => selected());
 const confirmDelete = ref(false);
 const copied = ref(false);
@@ -58,7 +60,7 @@ function onEdit(): void {
       <button
         class="icon-btn"
         :class="{ on: s.favorite }"
-        :title="s.favorite ? 'Unfavorite' : 'Favorite'"
+        :title="s.favorite ? t('preview.unfavorite') : t('preview.favorite')"
         @click="onToggleFav"
       >
         {{ s.favorite ? "★" : "☆" }}
@@ -67,34 +69,34 @@ function onEdit(): void {
 
     <div class="meta-grid">
       <div v-if="s.category" class="meta-row">
-        <span class="k">Category</span><span class="v">{{ s.category }}</span>
+        <span class="k">{{ t("preview.category") }}</span><span class="v">{{ s.category }}</span>
       </div>
       <div v-if="s.language" class="meta-row">
-        <span class="k">Language</span><span class="v">{{ s.language }}</span>
+        <span class="k">{{ t("preview.language") }}</span><span class="v">{{ s.language }}</span>
       </div>
       <div v-if="s.tags.length" class="meta-row">
-        <span class="k">Tags</span>
+        <span class="k">{{ t("preview.tags") }}</span>
         <span class="v">
-          <span v-for="t in s.tags" :key="t" class="chip">{{ t }}</span>
+          <span v-for="tag in s.tags" :key="tag" class="chip">{{ tag }}</span>
         </span>
       </div>
       <div v-if="s.aliases.length" class="meta-row">
-        <span class="k">Aliases</span>
+        <span class="k">{{ t("preview.aliases") }}</span>
         <span class="v">
           <span v-for="a in s.aliases" :key="a" class="chip alias">{{ a }}</span>
         </span>
       </div>
       <div class="meta-row">
-        <span class="k">Used</span>
+        <span class="k">{{ t("preview.used") }}</span>
         <span class="v">
-          {{ s.usageCount }} time{{ s.usageCount === 1 ? "" : "s" }}
+          {{ t("preview.usedValue", { count: s.usageCount }) }}
           <span v-if="s.lastUsedAt" class="dim">
-            · last {{ formatDateTime(s.lastUsedAt) }}
+            · {{ t("preview.last", { time: formatDateTime(s.lastUsedAt) }) }}
           </span>
         </span>
       </div>
       <div class="meta-row">
-        <span class="k">Updated</span>
+        <span class="k">{{ t("preview.updated") }}</span>
         <span class="v">{{ formatDateTime(s.updatedAt) }}</span>
       </div>
     </div>
@@ -103,11 +105,11 @@ function onEdit(): void {
 
     <div class="actions">
       <button class="btn primary" @click="onCopy">
-        {{ copied ? "✓ Copied" : "⧉ Copy" }}
+        {{ copied ? t("preview.copied") : t("preview.copy") }}
       </button>
-      <button class="btn" @click="onEdit">✎ Edit</button>
+      <button class="btn" @click="onEdit">{{ t("preview.edit") }}</button>
       <button class="btn danger" @click="onDelete">
-        {{ confirmDelete ? "Click again to confirm" : "🗑 Delete" }}
+        {{ confirmDelete ? t("preview.confirmDelete") : t("preview.delete") }}
       </button>
     </div>
   </div>

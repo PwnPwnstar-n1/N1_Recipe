@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   cancelVariableDialog,
   closeEditor,
+  confirmVariableDialog,
   copySelectedOrFirst,
   focusSearch,
+  initSettings,
   moveSelection,
   openCreate,
   openEdit,
@@ -18,19 +21,43 @@ import SnippetList from "./components/SnippetList.vue";
 import SnippetPreview from "./components/SnippetPreview.vue";
 import SnippetEditor from "./components/SnippetEditor.vue";
 import TemplateVariableDialog from "./components/TemplateVariableDialog.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
+import LauncherPrototype from "./components/LauncherPrototype.vue";
 
-onMounted(() => {
-  void refresh();
-  focusSearch();
-  window.addEventListener("keydown", onGlobalKeydown);
+const { t } = useI18n();
+
+// Multi-window foundation: each window renders this app bundle and picks its
+// role from the window label. Only the main window boots the management UI.
+const isLauncher = ref(false);
+
+onMounted(async () => {
+  isLauncher.value = await detectWindowRole();
+  await initSettings();
+  if (!isLauncher.value) {
+    void refresh();
+    focusSearch();
+    window.addEventListener("keydown", onGlobalKeydown);
+  }
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", onGlobalKeydown);
 });
 
+async function detectWindowRole(): Promise<boolean> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    return getCurrentWindow().label === "launcher";
+  } catch {
+    // plain browser (vite without Tauri) — assume main
+    return false;
+  }
+}
+
 const showEditor = computed(() => store.editor !== null);
-const showPreview = computed(() => store.editor === null && selected() !== null);
+const showPreview = computed(
+  () => store.editor === null && !store.settingsOpen && selected() !== null,
+);
 
 const TYPING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT", "BUTTON"]);
 
@@ -81,6 +108,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
       break;
     case "Escape":
       if (store.editor) closeEditor();
+      else if (store.settingsOpen) store.settingsOpen = false;
       else store.query = "";
       break;
   }
@@ -88,7 +116,9 @@ function onGlobalKeydown(e: KeyboardEvent): void {
 </script>
 
 <template>
-  <div class="app">
+  <LauncherPrototype v-if="isLauncher" />
+
+  <div v-else class="app">
     <Sidebar />
     <section class="main-pane">
       <SearchBar />
@@ -96,16 +126,21 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     </section>
     <aside class="detail-pane">
       <SnippetEditor v-if="showEditor" />
+      <SettingsPanel v-else-if="store.settingsOpen" />
       <SnippetPreview v-else-if="showPreview" />
       <div v-else class="empty-detail">
-        <p class="empty-title">No snippet selected</p>
-        <p class="empty-hint">
-          ↑ ↓ navigate · Enter copy · Ctrl+E edit · Ctrl+N new · Ctrl+F search
-        </p>
+        <p class="empty-title">{{ t("app.noSelection") }}</p>
+        <p class="empty-hint">{{ t("app.shortcutsHint") }}</p>
       </div>
     </aside>
     <div v-if="store.toast" class="toast">{{ store.toast }}</div>
-    <TemplateVariableDialog />
+    <TemplateVariableDialog
+      v-if="store.variableDialog"
+      :title="store.variableDialog.title"
+      :variables="store.variableDialog.variables"
+      @confirm="confirmVariableDialog"
+      @cancel="cancelVariableDialog"
+    />
   </div>
 </template>
 

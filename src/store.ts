@@ -1,6 +1,13 @@
 import { reactive, watch } from "vue";
 import * as api from "./api";
 import type { Snippet, SnippetInput, ViewName } from "./types";
+import {
+  applyLocale,
+  detectLocale,
+  localizeError,
+  t,
+  type AppLocale,
+} from "./i18n";
 
 export type EditorState = { mode: "create" } | { mode: "edit"; id: number };
 
@@ -19,6 +26,8 @@ export const store = reactive({
   selectedId: null as number | null,
   editor: null as EditorState | null,
   variableDialog: null as VariableDialogState | null,
+  settingsOpen: false,
+  settings: null as api.Settings | null,
   loading: false,
   toast: "",
   toastTimer: undefined as number | undefined,
@@ -41,6 +50,44 @@ export function focusSearch(): void {
   store.searchFocusTick += 1;
 }
 
+// ---------------------------------------------------------------------------
+// Settings / locale
+// ---------------------------------------------------------------------------
+
+/// Load the persisted settings; on first launch detect the locale from the
+/// system and persist it. Must run before any UI text is meaningful.
+export async function initSettings(): Promise<void> {
+  try {
+    const current = await api.getSettings();
+    if (current.language) {
+      applyLocale(current.language as AppLocale);
+      store.settings = current;
+      return;
+    }
+    const detected = detectLocale();
+    const saved = await api.setLanguage(detected);
+    store.settings = saved;
+    applyLocale(detected);
+  } catch (err) {
+    // Settings must never block startup; fall back to detected locale.
+    applyLocale(detectLocale());
+  }
+}
+
+export async function changeLanguage(locale: AppLocale): Promise<void> {
+  try {
+    const saved = await api.setLanguage(locale);
+    store.settings = saved;
+    applyLocale(locale);
+  } catch (err) {
+    showToast(localizeError(err));
+  }
+}
+
+export function toggleSettings(): void {
+  store.settingsOpen = !store.settingsOpen;
+}
+
 async function loadList(): Promise<void> {
   store.loading = true;
   try {
@@ -58,7 +105,7 @@ async function loadList(): Promise<void> {
       store.selectedId = store.items[0]?.id ?? null;
     }
   } catch (err) {
-    showToast(err instanceof Error ? err.message : String(err));
+    showToast(localizeError(err));
   } finally {
     store.loading = false;
   }
@@ -68,7 +115,7 @@ async function loadCategories(): Promise<void> {
   try {
     store.categories = await api.listCategories();
   } catch (err) {
-    showToast(err instanceof Error ? err.message : String(err));
+    showToast(localizeError(err));
   }
 }
 
@@ -81,11 +128,13 @@ export async function setView(view: ViewName, category = ""): Promise<void> {
   store.category = category;
   store.query = "";
   store.editor = null;
+  store.settingsOpen = false;
   await Promise.all([loadList(), loadCategories()]);
 }
 
 export function select(id: number): void {
   store.selectedId = id;
+  store.settingsOpen = false;
 }
 
 export function moveSelection(delta: number): void {
@@ -98,10 +147,12 @@ export function moveSelection(delta: number): void {
 
 export function openCreate(): void {
   store.editor = { mode: "create" };
+  store.settingsOpen = false;
 }
 
 export function openEdit(id: number): void {
   store.editor = { mode: "edit", id };
+  store.settingsOpen = false;
 }
 
 export function closeEditor(): void {
@@ -113,7 +164,7 @@ export async function toggleFavorite(s: Snippet): Promise<void> {
     await api.toggleFavorite(s.id);
     await loadList();
   } catch (err) {
-    showToast(err instanceof Error ? err.message : String(err));
+    showToast(localizeError(err));
   }
 }
 
@@ -124,9 +175,9 @@ export async function removeSnippet(id: number): Promise<void> {
       store.editor = null;
     }
     await Promise.all([loadList(), loadCategories()]);
-    showToast("Deleted");
+    showToast(t("toast.deleted"));
   } catch (err) {
-    showToast(err instanceof Error ? err.message : String(err));
+    showToast(localizeError(err));
   }
 }
 
@@ -137,16 +188,16 @@ export async function saveSnippet(input: SnippetInput): Promise<void> {
       store.editor = null;
       await loadList();
       store.selectedId = updated.id;
-      showToast("Saved");
+      showToast(t("toast.saved"));
     } else {
       const created = await api.createSnippet(input);
       store.editor = null;
       await Promise.all([loadList(), loadCategories()]);
       store.selectedId = created.id;
-      showToast("Created");
+      showToast(t("toast.created"));
     }
   } catch (err) {
-    showToast(err instanceof Error ? err.message : String(err));
+    showToast(localizeError(err));
   }
 }
 
@@ -164,7 +215,7 @@ export async function copySnippet(s: Snippet): Promise<string> {
     }
     return await performCopy(s.id, {});
   } catch (err) {
-    showToast(err instanceof Error ? err.message : String(err));
+    showToast(localizeError(err));
     return "";
   }
 }
@@ -176,7 +227,7 @@ async function performCopy(id: number, values: Record<string, string>): Promise<
   if (store.view === "recent" || store.view === "most_used") {
     void loadList();
   }
-  showToast("Copied to clipboard");
+  showToast(t("toast.copied"));
   return res.text;
 }
 
@@ -196,7 +247,7 @@ export async function confirmVariableDialog(
     await performCopy(dialog.id, values);
     store.variableDialog = null;
   } catch (err) {
-    showToast(err instanceof Error ? err.message : String(err));
+    showToast(localizeError(err));
   }
 }
 

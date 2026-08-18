@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
-import { formatRelative } from "../format";
+import { useI18n } from "vue-i18n";
+import { formatDateTime, formatRelative } from "../format";
 import { openEdit, select, store } from "../store";
 
+const { t } = useI18n();
 const listEl = ref<HTMLElement | null>(null);
 
 watch(
@@ -35,20 +37,28 @@ watch(
       </div>
       <div class="row2">
         <span v-if="s.category" class="meta category">{{ s.category }}</span>
-        <span v-for="t in s.tags" :key="t" class="meta chip">{{ t }}</span>
+        <span v-for="tag in s.tags" :key="tag" class="meta chip">{{ tag }}</span>
         <span class="spacer"></span>
-        <span v-if="s.usageCount > 0" class="meta usage" :title="`used ${s.usageCount} times`">
+        <span
+          v-if="s.usageCount > 0"
+          class="meta usage"
+          :title="t('list.usedTimes', { count: s.usageCount })"
+        >
           ×{{ s.usageCount }}
         </span>
-        <span v-if="s.lastUsedAt" class="meta time" :title="`last used ${new Date(s.lastUsedAt).toLocaleString()}`">
+        <span
+          v-if="s.lastUsedAt"
+          class="meta time"
+          :title="t('list.lastUsed', { time: formatDateTime(s.lastUsedAt) })"
+        >
           {{ formatRelative(s.lastUsedAt) }}
         </span>
       </div>
     </div>
 
     <div v-if="!store.loading && store.items.length === 0" class="empty">
-      <template v-if="store.query">No matches for “{{ store.query }}”</template>
-      <template v-else>No snippets. Ctrl+N to create one.</template>
+      <template v-if="store.query">{{ t("list.noMatches", { query: store.query }) }}</template>
+      <template v-else>{{ t("list.empty") }}</template>
     </div>
   </div>
 </template>

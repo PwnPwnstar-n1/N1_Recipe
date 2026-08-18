@@ -1,8 +1,9 @@
 use crate::db::Db;
 use crate::models::{CategoryInfo, CopyResult, ListView, Snippet, SnippetInput};
 use crate::repo::Repo;
+use crate::settings::{self, Settings};
 use std::collections::HashMap;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 type CmdResult<T> = Result<T, String>;
@@ -114,4 +115,52 @@ pub fn list_variables(db: State<'_, Db>, id: i64) -> CmdResult<Vec<String>> {
 pub fn list_categories(db: State<'_, Db>) -> CmdResult<Vec<CategoryInfo>> {
     let conn = db.0.lock().map_err(map_err)?;
     Repo::new(&conn).categories().map_err(map_err)
+}
+
+fn settings_path<R: tauri::Runtime>(app: &AppHandle<R>) -> CmdResult<std::path::PathBuf> {
+    let dir = app.path().app_data_dir().map_err(map_err)?;
+    Ok(dir.join("settings.json"))
+}
+
+#[tauri::command]
+pub fn get_settings<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<Settings> {
+    settings::load(&settings_path(&app)?)
+}
+
+/// Persist the UI language. The frontend applies it to vue-i18n
+/// immediately, so the switch takes effect without a restart.
+#[tauri::command]
+pub fn set_language<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    language: String,
+) -> CmdResult<Settings> {
+    settings::validate_language(&language)?;
+    let path = settings_path(&app)?;
+    let mut current = settings::load(&path)?;
+    current.language = Some(language);
+    settings::save(&path, &current)?;
+    Ok(current)
+}
+
+// ---------------------------------------------------------------------------
+// Window lifecycle (multi-window foundation). The launcher window is a
+// hidden prototype used to validate the create/show/focus/hide/close
+// lifecycle; the real launcher UI arrives in Phase 3.
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn show_launcher<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
+    let window = crate::windows::get(&app, crate::windows::roles::LAUNCHER)
+        .ok_or_else(|| "launcher window not initialized".to_string())?;
+    window.show().map_err(map_err)?;
+    window.set_focus().map_err(map_err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn hide_launcher<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
+    let window = crate::windows::get(&app, crate::windows::roles::LAUNCHER)
+        .ok_or_else(|| "launcher window not initialized".to_string())?;
+    window.hide().map_err(map_err)?;
+    Ok(())
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { copySelectedOrFirst, moveSelection, store } from "../store";
 
+const { t } = useI18n();
 const inputEl = ref<HTMLInputElement | null>(null);
 
 onMounted(() => inputEl.value?.focus());
@@ -38,11 +40,11 @@ function onKeydown(e: KeyboardEvent): void {
       v-model="store.query"
       class="search-input"
       type="text"
-      placeholder="Search snippets…  (title / alias / tag / category / content)"
+      :placeholder="t('search.placeholder')"
       spellcheck="false"
       @keydown="onKeydown"
     />
-    <span class="hint">Enter ↵ copy</span>
+    <span class="hint">{{ t("search.enterToCopy") }}</span>
   </div>
 </template>
 

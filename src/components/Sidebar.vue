@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { openCreate, setView, store } from "../store";
+import { useI18n } from "vue-i18n";
+import { openCreate, setView, store, toggleSettings } from "../store";
 import type { ViewName } from "../types";
 
-const views: { key: ViewName; label: string; icon: string }[] = [
-  { key: "all", label: "All Snippets", icon: "▤" },
-  { key: "favorites", label: "Favorites", icon: "★" },
-  { key: "recent", label: "Recent", icon: "◷" },
-  { key: "most_used", label: "Most Used", icon: "▲" },
+const { t } = useI18n();
+
+const views: { key: ViewName; labelKey: string; icon: string }[] = [
+  { key: "all", labelKey: "sidebar.all", icon: "▤" },
+  { key: "favorites", labelKey: "sidebar.favorites", icon: "★" },
+  { key: "recent", labelKey: "sidebar.recent", icon: "◷" },
+  { key: "most_used", labelKey: "sidebar.mostUsed", icon: "▲" },
 ];
 </script>
 
@@ -15,7 +18,7 @@ const views: { key: ViewName; label: string; icon: string }[] = [
     <div class="brand"><span class="logo">⌘</span><span>SnipDeck</span></div>
 
     <div class="section">
-      <div class="section-title">Library</div>
+      <div class="section-title">{{ t("sidebar.library") }}</div>
       <button
         v-for="v in views"
         :key="v.key"
@@ -24,12 +27,12 @@ const views: { key: ViewName; label: string; icon: string }[] = [
         @click="setView(v.key)"
       >
         <span class="icon">{{ v.icon }}</span>
-        <span class="label">{{ v.label }}</span>
+        <span class="label">{{ t(v.labelKey) }}</span>
       </button>
     </div>
 
     <div class="section grow">
-      <div class="section-title">Categories</div>
+      <div class="section-title">{{ t("sidebar.categories") }}</div>
       <button
         v-for="c in store.categories"
         :key="c.name"
@@ -42,12 +45,24 @@ const views: { key: ViewName; label: string; icon: string }[] = [
         <span class="count">{{ c.count }}</span>
       </button>
       <div v-if="store.categories.length === 0" class="empty-cats">
-        No categories yet
+        {{ t("sidebar.noCategories") }}
       </div>
     </div>
 
     <div class="footer">
-      <button class="new-btn" @click="openCreate">＋ New Snippet</button>
+      <div class="footer-row">
+        <button class="new-btn grow" @click="openCreate">
+          {{ t("sidebar.newSnippet") }}
+        </button>
+        <button
+          class="gear-btn"
+          :class="{ active: store.settingsOpen }"
+          :title="t('sidebar.settings')"
+          @click="toggleSettings"
+        >
+          ⚙
+        </button>
+      </div>
     </div>
   </nav>
 </template>
@@ -155,8 +170,13 @@ const views: { key: ViewName; label: string; icon: string }[] = [
   border-top: 1px solid var(--border);
 }
 
+.footer-row {
+  display: flex;
+  gap: 6px;
+}
+
 .new-btn {
-  width: 100%;
+  flex: 1;
   padding: 7px 10px;
   border: 1px solid var(--accent);
   border-radius: 5px;
@@ -168,5 +188,22 @@ const views: { key: ViewName; label: string; icon: string }[] = [
 
 .new-btn:hover {
   background: var(--bg-active);
+}
+
+.gear-btn {
+  width: 34px;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.gear-btn:hover,
+.gear-btn.active {
+  background: var(--bg-hover);
+  color: var(--text-bright);
 }
 </style>

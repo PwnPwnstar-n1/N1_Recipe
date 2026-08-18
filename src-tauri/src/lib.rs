@@ -3,7 +3,9 @@ pub mod db;
 pub mod models;
 mod repo;
 mod seed;
+pub mod settings;
 pub mod template;
+pub mod windows;
 
 use db::Db;
 use std::sync::Mutex;
@@ -18,6 +20,9 @@ pub fn run() {
             std::fs::create_dir_all(&dir)?;
             let conn = db::open(&dir.join("snipdeck.db"))?;
             app.manage(Db(Mutex::new(conn)));
+            // Multi-window foundation: the launcher window exists (hidden)
+            // from startup so show/hide/close lifecycle stays cheap.
+            windows::ensure_hidden_launcher(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -31,6 +36,10 @@ pub fn run() {
             commands::copy_snippet,
             commands::list_variables,
             commands::list_categories,
+            commands::get_settings,
+            commands::set_language,
+            commands::show_launcher,
+            commands::hide_launcher,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SnipDeck");

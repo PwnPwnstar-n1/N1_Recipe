@@ -60,3 +60,15 @@ export function listVariables(id: number): Promise<string[]> {
 export function listCategories(): Promise<CategoryInfo[]> {
   return call<CategoryInfo[]>("list_categories");
 }
+
+export interface Settings {
+  language: string | null;
+}
+
+export function getSettings(): Promise<Settings> {
+  return call<Settings>("get_settings");
+}
+
+export function setLanguage(language: string): Promise<Settings> {
+  return call<Settings>("set_language", { language });
+}
