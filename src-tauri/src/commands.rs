@@ -72,8 +72,13 @@ pub fn toggle_favorite(db: State<'_, Db>, id: i64) -> CmdResult<Snippet> {
 
 /// Copy the snippet content to the system clipboard, then bump usage_count
 /// and last_used_at. Returns the final text plus the updated snippet.
+/// Generic over the runtime so the mock-runtime IPC tests can drive it.
 #[tauri::command]
-pub fn copy_snippet(app: AppHandle, db: State<'_, Db>, id: i64) -> CmdResult<CopyResult> {
+pub fn copy_snippet<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    db: State<'_, Db>,
+    id: i64,
+) -> CmdResult<CopyResult> {
     let conn = db.0.lock().map_err(map_err)?;
     let repo = Repo::new(&conn);
     let mut snippet = repo.get(id).map_err(map_err)?;

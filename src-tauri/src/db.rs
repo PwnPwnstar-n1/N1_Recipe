@@ -51,14 +51,9 @@ const MIGRATIONS: &[&str] = &[
 ];
 
 /// Open (or create) the database at `path`, run pending migrations and seed
-/// sample data when the database was just created. `":memory:"` opens an
-/// in-memory database.
+/// sample data when the database was just created.
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
-    let mut conn = if path == Path::new(":memory:") {
-        Connection::open_in_memory()?
-    } else {
-        Connection::open(path)?
-    };
+    let mut conn = Connection::open(path)?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
 
     let fresh = current_version(&conn)? == 0;
@@ -69,11 +64,15 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     Ok(conn)
 }
 
-/// In-memory database without seed data — used by tests.
-pub fn open_memory_no_seed() -> rusqlite::Result<Connection> {
+/// In-memory database, optionally seeded — used by tests.
+pub fn open_in_memory(seed: bool) -> rusqlite::Result<Connection> {
     let mut conn = Connection::open_in_memory()?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    let fresh = current_version(&conn)? == 0;
     migrate(&mut conn)?;
+    if fresh && seed {
+        crate::seed::seed(&conn)?;
+    }
     Ok(conn)
 }
 
@@ -112,7 +111,7 @@ mod tests {
 
     #[test]
     fn memory_db_without_seed_is_empty() {
-        let conn = open_memory_no_seed().unwrap();
+        let conn = open_in_memory(false).unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM snippets", [], |r| r.get(0))
             .unwrap();

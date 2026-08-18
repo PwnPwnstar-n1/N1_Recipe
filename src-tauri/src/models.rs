@@ -1,4 +1,28 @@
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicI64, Ordering};
+
+/// Last timestamp handed out, so timestamps are strictly increasing even
+/// when two events land in the same millisecond. This keeps "Recent"
+/// ordering deterministic under rapid copies.
+static LAST_TIMESTAMP: AtomicI64 = AtomicI64::new(0);
+
+/// Current time as milliseconds since the Unix epoch, guaranteed strictly
+/// increasing across calls within the process.
+pub fn now_ms() -> i64 {
+    let real = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let mut prev = LAST_TIMESTAMP.load(Ordering::Relaxed);
+    loop {
+        let next = real.max(prev + 1);
+        match LAST_TIMESTAMP.compare_exchange_weak(prev, next, Ordering::Relaxed, Ordering::Relaxed)
+        {
+            Ok(_) => return next,
+            Err(actual) => prev = actual,
+        }
+    }
+}
 
 /// Supported snippet types. Serialized as uppercase strings (e.g. "PROMPT").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -120,12 +144,4 @@ impl ListView {
             _ => None,
         }
     }
-}
-
-/// Current time as milliseconds since the Unix epoch.
-pub fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }

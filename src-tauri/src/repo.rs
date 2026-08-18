@@ -243,11 +243,6 @@ impl<'a> Repo<'a> {
         rows.collect()
     }
 
-    pub fn count(&self) -> rusqlite::Result<i64> {
-        self.conn
-            .query_row("SELECT COUNT(*) FROM snippets", [], |row| row.get(0))
-    }
-
     /// Remove tags that no snippet references anymore.
     fn purge_orphan_tags(&self) {
         let _ = self.conn.execute(
@@ -382,7 +377,7 @@ mod tests {
 
     #[test]
     fn insert_then_get_roundtrip() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         let created = repo.insert(&full_input()).unwrap();
 
@@ -407,7 +402,7 @@ mod tests {
 
     #[test]
     fn update_replaces_fields_and_links() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         let created = repo.insert(&full_input()).unwrap();
 
@@ -431,7 +426,7 @@ mod tests {
 
     #[test]
     fn update_missing_id_errors() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         assert!(repo.update(999, &input("x", "y", "")).is_err());
         assert!(repo.delete(999).is_err());
@@ -440,7 +435,7 @@ mod tests {
 
     #[test]
     fn delete_removes_row_and_links() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         let created = repo.insert(&full_input()).unwrap();
         repo.delete(created.id).unwrap();
@@ -462,7 +457,7 @@ mod tests {
 
     #[test]
     fn search_finds_by_title_content_tag_alias_category() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         repo.insert(&full_input()).unwrap();
         let mut other = input("curl API template", "curl -X POST https://api.example.com", "Dev/HTTP");
@@ -481,7 +476,7 @@ mod tests {
 
     #[test]
     fn search_terms_are_anded() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         repo.insert(&full_input()).unwrap();
         let mut other = input("curl API template", "curl example", "Dev/HTTP");
@@ -494,7 +489,7 @@ mod tests {
 
     #[test]
     fn search_falls_back_to_subsequence() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         let mut s = full_input();
         s.aliases = vec![]; // no alias shortcut — pure subsequence match on title
@@ -507,7 +502,7 @@ mod tests {
 
     #[test]
     fn views_and_ordering() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         let a = repo.insert(&input("alpha", "a", "Cat/One")).unwrap();
         let b = repo.insert(&input("beta", "b", "Cat/Two")).unwrap();
@@ -543,7 +538,7 @@ mod tests {
 
     #[test]
     fn record_usage_increments_and_sets_last_used() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         let created = repo.insert(&input("cmd", "ls", "")).unwrap();
         assert!(created.last_used_at.is_none());
@@ -556,7 +551,7 @@ mod tests {
 
     #[test]
     fn toggle_favorite_flips() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         let created = repo.insert(&input("t", "c", "")).unwrap();
         assert!(!created.favorite);
@@ -568,7 +563,7 @@ mod tests {
 
     #[test]
     fn categories_are_counted_and_sorted() {
-        let conn = db::open_memory_no_seed().unwrap();
+        let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         repo.insert(&input("a", "x", "Zeta")).unwrap();
         repo.insert(&input("b", "x", "alpha")).unwrap();
