@@ -1,0 +1,119 @@
+:root {
+  --bg: #1e1e1e;
+  --bg-panel: #252526;
+  --bg-hover: #2a2d2e;
+  --bg-active: #094771;
+  --border: #333333;
+  --text: #cccccc;
+  --text-dim: #9d9d9d;
+  --text-faint: #6e6e6e;
+  --text-bright: #ffffff;
+  --accent: #4f9cf9;
+  --danger: #f14c4c;
+  --star: #e2b93d;
+  --mono: Consolas, "Cascadia Mono", "JetBrains Mono", "Courier New", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #525252;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.type-prompt {
+  background: #3a1d4e;
+  color: #c586c0;
+}
+
+.type-payload {
+  background: #4e2a1a;
+  color: #ce9178;
+}
+
+.type-exp {
+  background: #4a1d1d;
+  color: #f48771;
+}
+
+.type-command {
+  background: #1d3550;
+  color: #569cd6;
+}
+
+.type-code {
+  background: #1d4038;
+  color: #4ec9b0;
+}
+
+.type-text {
+  background: #333333;
+  color: #d4d4d4;
+}
+
+.type-template {
+  background: #40381d;
+  color: #dcdcaa;
+}
+
+.type-http {
+  background: #1d3a50;
+  color: #9cdcfe;
+}
+
+.chip {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 1px 8px;
+  border-radius: 9px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.chip.alias {
+  color: var(--accent);
+}
