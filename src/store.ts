@@ -4,6 +4,12 @@ import type { Snippet, SnippetInput, ViewName } from "./types";
 
 export type EditorState = { mode: "create" } | { mode: "edit"; id: number };
 
+export interface VariableDialogState {
+  id: number;
+  title: string;
+  variables: string[];
+}
+
 export const store = reactive({
   view: "all" as ViewName,
   category: "",
@@ -12,6 +18,7 @@ export const store = reactive({
   categories: [] as { name: string; count: number }[],
   selectedId: null as number | null,
   editor: null as EditorState | null,
+  variableDialog: null as VariableDialogState | null,
   loading: false,
   toast: "",
   toastTimer: undefined as number | undefined,
@@ -143,19 +150,53 @@ export async function saveSnippet(input: SnippetInput): Promise<void> {
   }
 }
 
+/// Copy flow entry point for a snippet. Snippets with ordinary template
+/// variables open the variable dialog instead of copying immediately; the
+/// actual copy (and usage_count bump) happens on dialog confirm via
+/// `confirmVariableDialog`. System variables resolve at copy time in the
+/// backend.
 export async function copySnippet(s: Snippet): Promise<string> {
   try {
-    const res = await api.copySnippet(s.id);
-    replaceItem(res.snippet);
-    // copied items move to the top of these views — reload to keep order true
-    if (store.view === "recent" || store.view === "most_used") {
-      void loadList();
+    const variables = await api.listVariables(s.id);
+    if (variables.length > 0) {
+      store.variableDialog = { id: s.id, title: s.title, variables };
+      return "";
     }
-    showToast("Copied to clipboard");
-    return res.text;
+    return await performCopy(s.id, {});
   } catch (err) {
     showToast(err instanceof Error ? err.message : String(err));
     return "";
+  }
+}
+
+async function performCopy(id: number, values: Record<string, string>): Promise<string> {
+  const res = await api.copySnippet(id, values);
+  replaceItem(res.snippet);
+  // copied items move to the top of these views — reload to keep order true
+  if (store.view === "recent" || store.view === "most_used") {
+    void loadList();
+  }
+  showToast("Copied to clipboard");
+  return res.text;
+}
+
+export function cancelVariableDialog(): void {
+  store.variableDialog = null;
+}
+
+/// Confirm the variable dialog: copy with the filled-in values. On failure
+/// the dialog stays open so the user can retry; usage_count is untouched
+/// because the backend only counts after a successful clipboard write.
+export async function confirmVariableDialog(
+  values: Record<string, string>,
+): Promise<void> {
+  const dialog = store.variableDialog;
+  if (!dialog) return;
+  try {
+    await performCopy(dialog.id, values);
+    store.variableDialog = null;
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : String(err));
   }
 }
 

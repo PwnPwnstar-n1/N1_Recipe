@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from "vue";
 import {
+  cancelVariableDialog,
   closeEditor,
   copySelectedOrFirst,
   focusSearch,
@@ -16,6 +17,7 @@ import SearchBar from "./components/SearchBar.vue";
 import SnippetList from "./components/SnippetList.vue";
 import SnippetPreview from "./components/SnippetPreview.vue";
 import SnippetEditor from "./components/SnippetEditor.vue";
+import TemplateVariableDialog from "./components/TemplateVariableDialog.vue";
 
 onMounted(() => {
   void refresh();
@@ -33,6 +35,17 @@ const showPreview = computed(() => store.editor === null && selected() !== null)
 const TYPING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT", "BUTTON"]);
 
 function onGlobalKeydown(e: KeyboardEvent): void {
+  // While the variable dialog is open it owns the keyboard: only Escape
+  // (cancel) is handled here; the dialog itself handles Enter/Escape on its
+  // fields. Swallowing the rest prevents background copy/edit shortcuts.
+  if (store.variableDialog) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cancelVariableDialog();
+    }
+    return;
+  }
+
   const target = e.target as HTMLElement | null;
   if (target && TYPING_TAGS.has(target.tagName)) return;
 
@@ -92,6 +105,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
       </div>
     </aside>
     <div v-if="store.toast" class="toast">{{ store.toast }}</div>
+    <TemplateVariableDialog />
   </div>
 </template>
 

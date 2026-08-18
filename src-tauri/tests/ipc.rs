@@ -11,6 +11,11 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 type MockApp = tauri::App<tauri::test::MockRuntime>;
 type MockWebview = tauri::WebviewWindow<tauri::test::MockRuntime>;
 
+/// Several tests below touch the REAL system clipboard. Windows clipboard
+/// access must not race across threads, so they serialize on this lock (the
+/// test harness runs tests on multiple threads).
+static CLIPBOARD_LOCK: Mutex<()> = Mutex::new(());
+
 fn setup() -> (MockApp, MockWebview) {
     let app = tauri::test::mock_builder()
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -23,6 +28,7 @@ fn setup() -> (MockApp, MockWebview) {
             commands::delete_snippet,
             commands::toggle_favorite,
             commands::copy_snippet,
+            commands::list_variables,
             commands::list_categories,
         ])
         .build(tauri::generate_context!())
@@ -160,6 +166,7 @@ fn views_and_favorites_via_ipc() {
 
 #[test]
 fn copy_via_ipc_writes_clipboard_and_bumps_usage() {
+    let _clipboard_guard = CLIPBOARD_LOCK.lock().unwrap();
     let (app, webview) = setup();
     let handle = app.handle().clone();
 
@@ -170,7 +177,7 @@ fn copy_via_ipc_writes_clipboard_and_bumps_usage() {
         .expect("create failed");
     let id = created["id"].as_i64().unwrap();
 
-    let result = invoke(&webview, "copy_snippet", json!({ "id": id }))
+    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": {} }))
         .expect("copy_snippet failed");
     assert_eq!(result["text"], sample_input()["content"]);
     assert_eq!(result["snippet"]["usageCount"], 1);
@@ -203,4 +210,174 @@ fn title_required_via_ipc() {
     input["title"] = json!("   ");
     let result = invoke(&webview, "create_snippet", json!({ "input": input }));
     assert_eq!(result.unwrap_err(), "title is required");
+}
+
+// ---------------------------------------------------------------------------
+// Template variables
+// ---------------------------------------------------------------------------
+
+fn create_with_content(webview: &MockWebview, title: &str, content: &str) -> i64 {
+    let created = invoke(
+        webview,
+        "create_snippet",
+        json!({ "input": {
+            "title": title,
+            "content": content,
+            "type": "TEXT",
+            "category": "",
+            "language": "",
+            "tags": [],
+            "aliases": []
+        }}),
+    )
+    .expect("create failed");
+    created["id"].as_i64().expect("id missing")
+}
+
+#[test]
+fn template_case1_ordinary_variable() {
+    let _clipboard_guard = CLIPBOARD_LOCK.lock().unwrap();
+    let (app, webview) = setup();
+    let handle = app.handle().clone();
+    let original = handle.clipboard().read_text().unwrap_or_default();
+
+    let id = create_with_content(&webview, "greet", "Hello {{name}}");
+
+    // dialog would be built from this list
+    let vars = invoke(&webview, "list_variables", json!({ "id": id }))
+        .expect("list_variables failed");
+    assert_eq!(vars, json!(["name"]));
+
+    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": { "name": "N1" } }))
+        .expect("copy_snippet failed");
+    assert_eq!(result["text"], "Hello N1");
+    assert_eq!(result["snippet"]["usageCount"], 1);
+    assert_eq!(handle.clipboard().read_text().unwrap(), "Hello N1");
+
+    handle.clipboard().write_text(original).expect("restore clipboard failed");
+}
+
+#[test]
+fn template_case2_system_variable_only_no_dialog() {
+    let _clipboard_guard = CLIPBOARD_LOCK.lock().unwrap();
+    let (app, webview) = setup();
+    let handle = app.handle().clone();
+    let original = handle.clipboard().read_text().unwrap_or_default();
+
+    let id = create_with_content(&webview, "ts", "Generated: {{datetime}}");
+
+    // no ordinary variables -> the frontend would copy without a dialog
+    let vars = invoke(&webview, "list_variables", json!({ "id": id }))
+        .expect("list_variables failed");
+    assert_eq!(vars, json!([]));
+
+    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": {} }))
+        .expect("copy_snippet failed");
+    let text = result["text"].as_str().unwrap();
+    assert!(is_datetime_template(text), "unexpected datetime text: {text}");
+    assert_eq!(result["snippet"]["usageCount"], 1);
+    assert_eq!(handle.clipboard().read_text().unwrap(), text);
+
+    handle.clipboard().write_text(original).expect("restore clipboard failed");
+}
+
+/// `Generated: YYYY-MM-DD HH:mm:ss`
+fn is_datetime_template(text: &str) -> bool {
+    let rest = text.strip_prefix("Generated: ").unwrap_or_default();
+    rest.len() == "YYYY-MM-DD HH:mm:ss".len()
+        && rest
+            .chars()
+            .enumerate()
+            .all(|(i, c)| match i {
+                4 | 7 => c == '-',
+                13 | 16 => c == ':',
+                10 => c == ' ',
+                _ => c.is_ascii_digit(),
+            })
+}
+
+#[test]
+fn template_case3_clipboard_and_ordinary_variable() {
+    let _clipboard_guard = CLIPBOARD_LOCK.lock().unwrap();
+    let (app, webview) = setup();
+    let handle = app.handle().clone();
+    let original = handle.clipboard().read_text().unwrap_or_default();
+
+    // pre-set the system clipboard, as the case requires
+    handle
+        .clipboard()
+        .write_text("ctx from clipboard")
+        .expect("failed to preset clipboard");
+
+    let content = "Analyze:\n\n{{clipboard}}\n\nGoal:\n{{goal}}";
+    let id = create_with_content(&webview, "analyze", content);
+
+    let vars = invoke(&webview, "list_variables", json!({ "id": id }))
+        .expect("list_variables failed");
+    assert_eq!(vars, json!(["goal"]));
+
+    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": { "goal": "G1" } }))
+        .expect("copy_snippet failed");
+    let expected = "Analyze:\n\nctx from clipboard\n\nGoal:\nG1";
+    assert_eq!(result["text"], expected);
+    assert_eq!(handle.clipboard().read_text().unwrap(), expected);
+    assert_eq!(result["snippet"]["usageCount"], 1);
+
+    handle.clipboard().write_text(original).expect("restore clipboard failed");
+}
+
+#[test]
+fn template_empty_value_replaces_with_empty_string() {
+    let _clipboard_guard = CLIPBOARD_LOCK.lock().unwrap();
+    let (app, webview) = setup();
+    let handle = app.handle().clone();
+    let original = handle.clipboard().read_text().unwrap_or_default();
+
+    let id = create_with_content(&webview, "desc", "Please: {{description}}");
+    let result = invoke(
+        &webview,
+        "copy_snippet",
+        json!({ "id": id, "values": { "description": "" } }),
+    )
+    .expect("copy_snippet failed");
+    assert_eq!(result["text"], "Please: ");
+    assert_eq!(result["snippet"]["usageCount"], 1);
+
+    handle.clipboard().write_text(original).expect("restore clipboard failed");
+}
+
+#[test]
+fn template_missing_values_rejected_without_counting() {
+    let (_app, webview) = setup();
+    let id = create_with_content(&webview, "multi", "{{host}}:{{port}}");
+
+    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": {} }));
+    let err = result.unwrap_err();
+    assert!(err.contains("missing variable values"), "unexpected error: {err}");
+    assert!(err.contains("host") && err.contains("port"));
+
+    // usage_count must NOT have been incremented
+    let snippet = invoke(&webview, "get_snippet", json!({ "id": id })).expect("get failed");
+    assert_eq!(snippet["usageCount"], 0);
+
+    // partial values are also rejected
+    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": { "host": "h" } }));
+    assert!(result.is_err());
+    let snippet = invoke(&webview, "get_snippet", json!({ "id": id })).expect("get failed");
+    assert_eq!(snippet["usageCount"], 0);
+}
+
+#[test]
+fn template_dialog_cancel_contract_no_copy_invocation() {
+    // Cancel is a pure frontend action: the dialog is closed without calling
+    // copy_snippet. This test pins the backend half of that contract — merely
+    // listing variables (what the dialog does on open) must not touch
+    // usage_count, and only copy_snippet performs the copy.
+    let (_app, webview) = setup();
+    let id = create_with_content(&webview, "cancel", "Hello {{name}}");
+
+    let _ = invoke(&webview, "list_variables", json!({ "id": id })).unwrap();
+    let snippet = invoke(&webview, "get_snippet", json!({ "id": id })).expect("get failed");
+    assert_eq!(snippet["usageCount"], 0);
+    assert!(snippet["lastUsedAt"].is_null());
 }

@@ -1,6 +1,7 @@
 use crate::db::Db;
 use crate::models::{CategoryInfo, CopyResult, ListView, Snippet, SnippetInput};
 use crate::repo::Repo;
+use std::collections::HashMap;
 use tauri::{AppHandle, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -71,27 +72,42 @@ pub fn toggle_favorite(db: State<'_, Db>, id: i64) -> CmdResult<Snippet> {
 }
 
 /// Copy the snippet content to the system clipboard, then bump usage_count
-/// and last_used_at. Returns the final text plus the updated snippet.
+/// and last_used_at. Template variables are rendered with `values` (system
+/// variables are resolved at copy time). usage_count is only incremented
+/// after the rendered text was actually written to the clipboard.
 /// Generic over the runtime so the mock-runtime IPC tests can drive it.
 #[tauri::command]
 pub fn copy_snippet<R: tauri::Runtime>(
     app: AppHandle<R>,
     db: State<'_, Db>,
     id: i64,
+    values: HashMap<String, String>,
 ) -> CmdResult<CopyResult> {
     let conn = db.0.lock().map_err(map_err)?;
     let repo = Repo::new(&conn);
     let mut snippet = repo.get(id).map_err(map_err)?;
-    app.clipboard()
-        .write_text(snippet.content.clone())
-        .map_err(map_err)?;
+
+    // Reject before writing anything: every ordinary variable must have a value.
+    let missing = crate::template::missing_variables(&snippet.content, &values);
+    if !missing.is_empty() {
+        return Err(format!("missing variable values: {}", missing.join(", ")));
+    }
+
+    let text = crate::template::render_with_system(&app, &snippet.content, &values);
+    app.clipboard().write_text(text.clone()).map_err(map_err)?;
     repo.record_usage(id).map_err(map_err)?;
     snippet.usage_count += 1;
     snippet.last_used_at = Some(crate::models::now_ms());
-    Ok(CopyResult {
-        text: snippet.content.clone(),
-        snippet,
-    })
+    Ok(CopyResult { text, snippet })
+}
+
+/// Ordered ordinary template variables of a snippet — the frontend builds the
+/// variable dialog from this list. System variables are excluded.
+#[tauri::command]
+pub fn list_variables(db: State<'_, Db>, id: i64) -> CmdResult<Vec<String>> {
+    let conn = db.0.lock().map_err(map_err)?;
+    let snippet = Repo::new(&conn).get(id).map_err(map_err)?;
+    Ok(crate::template::extract_variables(&snippet.content))
 }
 
 #[tauri::command]

@@ -49,8 +49,12 @@ export function toggleFavorite(id: number): Promise<Snippet> {
   return call<Snippet>("toggle_favorite", { id });
 }
 
-export function copySnippet(id: number): Promise<CopyResult> {
-  return call<CopyResult>("copy_snippet", { id });
+export function copySnippet(id: number, values: Record<string, string>): Promise<CopyResult> {
+  return call<CopyResult>("copy_snippet", { id, values });
+}
+
+export function listVariables(id: number): Promise<string[]> {
+  return call<string[]>("list_variables", { id });
 }
 
 export function listCategories(): Promise<CategoryInfo[]> {

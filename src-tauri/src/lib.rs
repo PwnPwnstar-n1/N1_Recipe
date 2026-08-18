@@ -3,6 +3,7 @@ pub mod db;
 pub mod models;
 mod repo;
 mod seed;
+pub mod template;
 
 use db::Db;
 use std::sync::Mutex;
@@ -28,6 +29,7 @@ pub fn run() {
             commands::delete_snippet,
             commands::toggle_favorite,
             commands::copy_snippet,
+            commands::list_variables,
             commands::list_categories,
         ])
         .run(tauri::generate_context!())
