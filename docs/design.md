@@ -12,7 +12,7 @@ SnipDeck will have three window roles (window label = role, see
 | Role     | Label     | Purpose                                    | Status        |
 | -------- | --------- | ------------------------------------------ | ------------- |
 | Main     | `main`    | Full management UI (edit / categories / settings) | implemented   |
-| Launcher | `launcher`| Global-shortcut quick search + Enter copy  | hidden prototype (Phase 3) |
+| Launcher | `launcher`| Global-shortcut quick search + Enter copy  | implemented (Phase 3) |
 | Dock     | `dock`    | Edge-docked quick access panel             | planned only  |
 
 Rules:
@@ -23,18 +23,24 @@ Rules:
   `repo` (CRUD/search/views), `template` (variables/system values),
   `copy_snippet` (clipboard + usage_count), `settings`.
 - `windows.rs` is the Window Service: role constants, `get()` by role,
-  `create_launcher()`, `ensure_hidden_launcher()`, and lifecycle commands
-  (`show_launcher` / `hide_launcher`). The launcher window is created hidden
-  at startup and **never destroyed at runtime**: creating a webview from an
-  IPC/sync-command thread deadlocks on Windows (upstream wry issue), so
-  create happens only on the main thread during setup and show/hide is the
-  only runtime transition.
+  `create_launcher()`, `ensure_hidden_launcher()`, cursor-monitor positioning
+  and lifecycle commands (`show_launcher` / `hide_launcher`). The launcher
+  window is created hidden at startup and **never destroyed at runtime**:
+  creating a webview from an IPC/sync-command thread deadlocks on Windows
+  (upstream wry issue), so create happens only on the main thread during
+  setup and show/hide is the only runtime transition.
 - `TemplateVariableDialog` is props/emits-only and reusable from any window.
   The main window's `store.ts` (views/editor state) is main-window specific;
-  the launcher will get its own lightweight composable reusing `api.ts`,
-  `types.ts`, `i18n`, and the dialog component. `SnippetList`/`SearchBar`
-  are main-window components; the launcher will use a compact list of its
-  own (no premature extraction).
+  the launcher uses its own `launcherStore.ts` (query/results/selection/
+  dialog/copy feedback) reusing `api.ts`, `types.ts`, `i18n`, and the dialog
+  component. `SnippetList`/`SearchBar` are main-window components; the
+  launcher has its own compact list.
+- Global shortcut (`src-tauri/src/shortcut.rs`): the plugin's `on_shortcut`
+  performs the OS registration itself — calling `register()` first would
+  register the same hotkey twice (the second attempt fails and the first
+  registration leaks). Updates are atomic: validate → register new → save
+  settings → unregister old → record state; a failed registration never
+  breaks the current shortcut or overwrites settings.json.
 
 ## Settings Shape (planned, only `language` implemented)
 
