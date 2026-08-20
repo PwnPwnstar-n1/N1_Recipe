@@ -37,5 +37,10 @@ export function localizeError(err: unknown): string {
   if (msg === "title is required") return t("errors.titleRequired");
   const missing = msg.match(/^missing variable values: (.+)$/);
   if (missing) return t("errors.missingVariables", { variables: missing[1] });
+  if (msg.startsWith("invalid shortcut")) return t("errors.shortcutInvalid");
+  if (msg.startsWith("failed to register shortcut"))
+    return t("errors.shortcutRegistrationFailed");
+  if (msg.startsWith("failed to bind shortcut handler"))
+    return t("errors.shortcutRegistrationFailed");
   return msg;
 }

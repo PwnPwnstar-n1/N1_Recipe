@@ -3,7 +3,7 @@ use crate::models::{CategoryInfo, CopyResult, ListView, Snippet, SnippetInput};
 use crate::repo::Repo;
 use crate::settings::{self, Settings};
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 type CmdResult<T> = Result<T, String>;
@@ -117,14 +117,9 @@ pub fn list_categories(db: State<'_, Db>) -> CmdResult<Vec<CategoryInfo>> {
     Repo::new(&conn).categories().map_err(map_err)
 }
 
-fn settings_path<R: tauri::Runtime>(app: &AppHandle<R>) -> CmdResult<std::path::PathBuf> {
-    let dir = app.path().app_data_dir().map_err(map_err)?;
-    Ok(dir.join("settings.json"))
-}
-
 #[tauri::command]
 pub fn get_settings<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<Settings> {
-    settings::load(&settings_path(&app)?)
+    settings::load(&settings::app_settings_path(&app)?)
 }
 
 /// Persist the UI language. The frontend applies it to vue-i18n
@@ -135,32 +130,63 @@ pub fn set_language<R: tauri::Runtime>(
     language: String,
 ) -> CmdResult<Settings> {
     settings::validate_language(&language)?;
-    let path = settings_path(&app)?;
+    let path = settings::app_settings_path(&app)?;
     let mut current = settings::load(&path)?;
     current.language = Some(language);
     settings::save(&path, &current)?;
     Ok(current)
 }
 
+/// Atomically update the launcher shortcut settings:
+///
+/// 1. validate the accelerator format
+/// 2. register the NEW shortcut (fails -> nothing changed, old stays live)
+/// 3. persist settings
+/// 4. unregister the OLD shortcut (best effort)
+/// 5. record the registered shortcut
+///
+/// A failed registration never breaks the currently working shortcut and
+/// never overwrites settings.json.
+#[tauri::command]
+pub fn update_launcher_settings<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    launcher: settings::LauncherSettings,
+) -> CmdResult<Settings> {
+    settings::validate_shortcut(&launcher.shortcut)?;
+    let old = crate::shortcut::registered_shortcut(&app)?;
+
+    if launcher.enabled && old.as_deref() != Some(launcher.shortcut.as_str()) {
+        crate::shortcut::register_shortcut(&app, &launcher.shortcut)?;
+    }
+
+    let path = settings::app_settings_path(&app)?;
+    let mut current = settings::load(&path)?;
+    current.launcher = launcher.clone();
+    settings::save(&path, &current)?;
+
+    if let Some(old) = old {
+        if old != launcher.shortcut {
+            crate::shortcut::unregister_shortcut(&app, &old);
+        }
+    }
+    crate::shortcut::set_registered_shortcut(
+        &app,
+        launcher.enabled.then(|| launcher.shortcut.clone()),
+    )?;
+    Ok(current)
+}
+
 // ---------------------------------------------------------------------------
-// Window lifecycle (multi-window foundation). The launcher window is a
-// hidden prototype used to validate the create/show/focus/hide/close
-// lifecycle; the real launcher UI arrives in Phase 3.
+// Window lifecycle — the launcher window is created hidden at startup and
+// only shown/hidden at runtime (never destroyed; see src/windows.rs).
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn show_launcher<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
-    let window = crate::windows::get(&app, crate::windows::roles::LAUNCHER)
-        .ok_or_else(|| "launcher window not initialized".to_string())?;
-    window.show().map_err(map_err)?;
-    window.set_focus().map_err(map_err)?;
-    Ok(())
+    crate::windows::show_launcher_window(&app)
 }
 
 #[tauri::command]
 pub fn hide_launcher<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
-    let window = crate::windows::get(&app, crate::windows::roles::LAUNCHER)
-        .ok_or_else(|| "launcher window not initialized".to_string())?;
-    window.hide().map_err(map_err)?;
-    Ok(())
+    crate::windows::hide_launcher_window(&app)
 }

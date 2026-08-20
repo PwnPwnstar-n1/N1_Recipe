@@ -63,6 +63,10 @@ export function listCategories(): Promise<CategoryInfo[]> {
 
 export interface Settings {
   language: string | null;
+  launcher: {
+    enabled: boolean;
+    shortcut: string;
+  };
 }
 
 export function getSettings(): Promise<Settings> {
@@ -71,4 +75,19 @@ export function getSettings(): Promise<Settings> {
 
 export function setLanguage(language: string): Promise<Settings> {
   return call<Settings>("set_language", { language });
+}
+
+export function updateLauncherSettings(launcher: {
+  enabled: boolean;
+  shortcut: string;
+}): Promise<Settings> {
+  return call<Settings>("update_launcher_settings", { launcher });
+}
+
+export function showLauncher(): Promise<void> {
+  return call<void>("show_launcher");
+}
+
+export function hideLauncher(): Promise<void> {
+  return call<void>("hide_launcher");
 }

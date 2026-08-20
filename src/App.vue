@@ -22,7 +22,7 @@ import SnippetPreview from "./components/SnippetPreview.vue";
 import SnippetEditor from "./components/SnippetEditor.vue";
 import TemplateVariableDialog from "./components/TemplateVariableDialog.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
-import LauncherPrototype from "./components/LauncherPrototype.vue";
+import LauncherView from "./components/LauncherView.vue";
 
 const { t } = useI18n();
 
@@ -116,7 +116,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
 </script>
 
 <template>
-  <LauncherPrototype v-if="isLauncher" />
+  <LauncherView v-if="isLauncher" />
 
   <div v-else class="app">
     <Sidebar />

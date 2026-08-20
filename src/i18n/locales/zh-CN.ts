@@ -69,11 +69,20 @@ export default {
     title: "设置",
     language: "语言",
     languageHint: "切换立即生效",
+    quickLauncher: "快速启动器",
+    enableLauncher: "启用快速启动器",
+    shortcut: "快捷键",
+    shortcutPlaceholder: "例如 Ctrl+Alt+Space",
+    openLauncher: "打开启动器",
+    shortcutSaved: "快捷键已更新",
   },
   launcher: {
     title: "SnipDeck 启动器",
     prototype: "启动器原型 — 完整启动器将在 Phase 3 实现。",
     hide: "隐藏（原型）",
+    placeholder: "搜索 Snippet...",
+    empty: "无结果",
+    copied: "已复制",
   },
   toast: {
     copied: "已复制到剪贴板",
@@ -84,6 +93,8 @@ export default {
   errors: {
     titleRequired: "标题不能为空",
     missingVariables: "缺少变量值：{variables}",
+    shortcutInvalid: "快捷键格式无效",
+    shortcutRegistrationFailed: "快捷键注册失败 — 可能已被其他应用占用",
   },
   time: {
     never: "从未使用",

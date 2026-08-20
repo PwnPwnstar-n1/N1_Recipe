@@ -69,11 +69,20 @@ export default {
     title: "Settings",
     language: "Language",
     languageHint: "Applies immediately",
+    quickLauncher: "Quick Launcher",
+    enableLauncher: "Enable Quick Launcher",
+    shortcut: "Shortcut",
+    shortcutPlaceholder: "e.g. Ctrl+Alt+Space",
+    openLauncher: "Open Launcher",
+    shortcutSaved: "Shortcut updated",
   },
   launcher: {
     title: "SnipDeck Launcher",
     prototype: "Launcher prototype — the full launcher arrives in Phase 3.",
     hide: "Hide (prototype)",
+    placeholder: "Search snippets...",
+    empty: "No results",
+    copied: "Copied",
   },
   toast: {
     copied: "Copied to clipboard",
@@ -84,6 +93,9 @@ export default {
   errors: {
     titleRequired: "Title is required",
     missingVariables: "Missing variable values: {variables}",
+    shortcutInvalid: "Invalid shortcut",
+    shortcutRegistrationFailed:
+      "Shortcut registration failed — it may be in use by another application",
   },
   time: {
     never: "never",
