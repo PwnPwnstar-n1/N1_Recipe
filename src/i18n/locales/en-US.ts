@@ -75,6 +75,20 @@ export default {
     shortcutPlaceholder: "e.g. Ctrl+Alt+Space",
     openLauncher: "Open Launcher",
     shortcutSaved: "Shortcut updated",
+    dock: "Desktop Dock",
+    enableDock: "Enable Desktop Dock",
+    dockPosition: "Position",
+    left: "Left",
+    right: "Right",
+    alwaysOnTop: "Always On Top",
+    autoHide: "Auto Hide",
+  },
+  dock: {
+    placeholder: "Search snippets...",
+    favorites: "Favorites",
+    recent: "Recent",
+    empty: "No results",
+    copied: "Copied",
   },
   launcher: {
     title: "SnipDeck Launcher",
@@ -96,6 +110,7 @@ export default {
     shortcutInvalid: "Invalid shortcut",
     shortcutRegistrationFailed:
       "Shortcut registration failed — it may be in use by another application",
+    dockInvalid: "Invalid dock settings",
   },
   time: {
     never: "never",

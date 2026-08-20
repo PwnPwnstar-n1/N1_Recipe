@@ -67,6 +67,15 @@ export interface Settings {
     enabled: boolean;
     shortcut: string;
   };
+  dock: {
+    enabled: boolean;
+    position: "left" | "right";
+    autoHide: boolean;
+    alwaysOnTop: boolean;
+    collapsedWidth: number;
+    expandedWidth: number;
+    hideDelay: number;
+  };
 }
 
 export function getSettings(): Promise<Settings> {
@@ -82,6 +91,18 @@ export function updateLauncherSettings(launcher: {
   shortcut: string;
 }): Promise<Settings> {
   return call<Settings>("update_launcher_settings", { launcher });
+}
+
+export function updateDockSettings(dock: Settings["dock"]): Promise<Settings> {
+  return call<Settings>("apply_dock_settings", { dock });
+}
+
+export function expandDock(): Promise<void> {
+  return call<void>("expand_dock");
+}
+
+export function collapseDock(): Promise<void> {
+  return call<void>("collapse_dock");
 }
 
 export function showLauncher(): Promise<void> {

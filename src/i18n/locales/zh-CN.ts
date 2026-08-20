@@ -75,6 +75,20 @@ export default {
     shortcutPlaceholder: "例如 Ctrl+Alt+Space",
     openLauncher: "打开启动器",
     shortcutSaved: "快捷键已更新",
+    dock: "桌面 Dock",
+    enableDock: "启用桌面 Dock",
+    dockPosition: "位置",
+    left: "左侧",
+    right: "右侧",
+    alwaysOnTop: "置顶显示",
+    autoHide: "自动收起",
+  },
+  dock: {
+    placeholder: "搜索 Snippet...",
+    favorites: "收藏",
+    recent: "最近使用",
+    empty: "无结果",
+    copied: "已复制",
   },
   launcher: {
     title: "SnipDeck 启动器",
@@ -95,6 +109,7 @@ export default {
     missingVariables: "缺少变量值：{variables}",
     shortcutInvalid: "快捷键格式无效",
     shortcutRegistrationFailed: "快捷键注册失败 — 可能已被其他应用占用",
+    dockInvalid: "Dock 设置无效",
   },
   time: {
     never: "从未使用",

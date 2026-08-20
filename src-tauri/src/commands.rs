@@ -3,7 +3,7 @@ use crate::models::{CategoryInfo, CopyResult, ListView, Snippet, SnippetInput};
 use crate::repo::Repo;
 use crate::settings::{self, Settings};
 use std::collections::HashMap;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 type CmdResult<T> = Result<T, String>;
@@ -189,4 +189,77 @@ pub fn show_launcher<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
 #[tauri::command]
 pub fn hide_launcher<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
     crate::windows::hide_launcher_window(&app)
+}
+
+// ---------------------------------------------------------------------------
+// Desktop edge dock — geometry lives in windows.rs; commands only express
+// intent (apply / expand / collapse) and broadcast the resulting state so
+// the dock's frontend can render the matching UI. The dock window is never
+// destroyed at runtime.
+// ---------------------------------------------------------------------------
+
+/// Persist dock settings and apply them immediately: position + size
+/// (collapsed geometry), always-on-top, and show/hide per `enabled`.
+#[tauri::command]
+pub fn apply_dock_settings<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    dock: crate::settings::DockSettings,
+) -> CmdResult<Settings> {
+    settings::validate_dock(&dock)?;
+    let path = settings::app_settings_path(&app)?;
+    let mut current = settings::load(&path)?;
+    current.dock = dock.clone();
+    settings::save(&path, &current)?;
+
+    let window = crate::windows::get(&app, crate::windows::roles::DOCK)
+        .ok_or_else(|| "dock window not initialized".to_string())?;
+    window
+        .set_always_on_top(dock.always_on_top)
+        .map_err(map_err)?;
+    crate::windows::apply_dock_geometry(&window, &dock, false).map_err(map_err)?;
+
+    if dock.enabled {
+        window.show().map_err(map_err)?;
+        app.emit("dock:settings", &dock).map_err(map_err)?;
+        app.emit("dock:state", "collapsed").map_err(map_err)?;
+    } else {
+        window.hide().map_err(map_err)?;
+        app.emit("dock:settings", &dock).map_err(map_err)?;
+        app.emit("dock:state", "hidden").map_err(map_err)?;
+    }
+    Ok(current)
+}
+
+#[tauri::command]
+pub fn expand_dock<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
+    let window = crate::windows::get(&app, crate::windows::roles::DOCK)
+        .ok_or_else(|| "dock window not initialized".to_string())?;
+    let settings = settings::load(&settings::app_settings_path(&app)?)?;
+    // idempotent: already expanded -> nothing to do (no redundant commands,
+    // no state events to race later transitions)
+    if crate::windows::dock_matches_width(&window, settings.dock.expanded_width as f64)
+        .map_err(map_err)?
+    {
+        return Ok(());
+    }
+    window.show().map_err(map_err)?;
+    crate::windows::apply_dock_geometry(&window, &settings.dock, true).map_err(map_err)?;
+    app.emit("dock:state", "expanded").map_err(map_err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn collapse_dock<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
+    let window = crate::windows::get(&app, crate::windows::roles::DOCK)
+        .ok_or_else(|| "dock window not initialized".to_string())?;
+    let settings = settings::load(&settings::app_settings_path(&app)?)?;
+    // idempotent: already collapsed -> nothing to do
+    if crate::windows::dock_matches_width(&window, settings.dock.collapsed_width as f64)
+        .map_err(map_err)?
+    {
+        return Ok(());
+    }
+    crate::windows::apply_dock_geometry(&window, &settings.dock, false).map_err(map_err)?;
+    app.emit("dock:state", "collapsed").map_err(map_err)?;
+    Ok(())
 }

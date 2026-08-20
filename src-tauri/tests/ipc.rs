@@ -34,6 +34,9 @@ fn setup() -> (MockApp, MockWebview) {
             commands::set_language,
             commands::show_launcher,
             commands::hide_launcher,
+            commands::apply_dock_settings,
+            commands::expand_dock,
+            commands::collapse_dock,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build mock app");
@@ -423,4 +426,22 @@ fn launcher_lifecycle_commands_wiring() {
         invoke(&webview, "show_launcher", json!({})).expect("show in cycle failed");
         invoke(&webview, "hide_launcher", json!({})).expect("hide in cycle failed");
     }
+}
+
+#[test]
+fn dock_commands_wiring() {
+    // Dock window is created once at startup and only shown/hidden/resized
+    // at runtime (never destroyed — same wry constraint as the launcher).
+    // The mock runtime stubs geometry/visibility, and expand/collapse read
+    // the REAL settings.json via the mock path resolver, so command
+    // execution itself is verified at runtime (CDP). Here we pin the
+    // window-role contract and the create lifecycle only.
+    let (app, _webview) = setup();
+    let handle = app.handle().clone();
+
+    snipdeck_lib::windows::create_dock(&handle).expect("failed to create dock");
+    assert!(
+        snipdeck_lib::windows::get(&handle, snipdeck_lib::windows::roles::DOCK).is_some(),
+        "dock should exist after creation"
+    );
 }

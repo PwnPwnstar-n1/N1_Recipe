@@ -2,7 +2,12 @@
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import * as api from "../api";
-import { changeLanguage, store, updateLauncherSettings } from "../store";
+import {
+  changeLanguage,
+  store,
+  updateDockSettings,
+  updateLauncherSettings,
+} from "../store";
 import type { AppLocale } from "../i18n";
 
 const { t } = useI18n();
@@ -76,6 +81,57 @@ async function openLauncher(): Promise<void> {
     shortcutIsError.value = true;
   }
 }
+
+// Desktop dock: each control commits the full dock settings (backend
+// validates + applies geometry/visibility immediately).
+const dockFeedback = ref("");
+const dockIsError = ref(false);
+
+function currentDock(): api.Settings["dock"] {
+  return (
+    store.settings?.dock ?? {
+      enabled: false,
+      position: "right",
+      autoHide: true,
+      alwaysOnTop: true,
+      collapsedWidth: 8,
+      expandedWidth: 360,
+      hideDelay: 400,
+    }
+  );
+}
+
+async function commitDock(patch: Partial<api.Settings["dock"]>): Promise<void> {
+  const next = { ...currentDock(), ...patch };
+  const error = await updateDockSettings(next);
+  if (error !== null) {
+    dockFeedback.value = error;
+    dockIsError.value = true;
+  } else {
+    dockFeedback.value = "";
+    dockIsError.value = false;
+  }
+}
+
+function onToggleDockEnabled(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  void commitDock({ enabled: target.checked });
+}
+
+function onChangeDockPosition(e: Event): void {
+  const target = e.target as HTMLSelectElement;
+  void commitDock({ position: target.value as "left" | "right" });
+}
+
+function onToggleDockAlwaysOnTop(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  void commitDock({ alwaysOnTop: target.checked });
+}
+
+function onToggleDockAutoHide(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  void commitDock({ autoHide: target.checked });
+}
 </script>
 
 <template>
@@ -122,6 +178,48 @@ async function openLauncher(): Promise<void> {
       </button>
       <p v-if="shortcutFeedback" class="feedback" :class="{ ok: !shortcutIsError }">
         {{ shortcutFeedback }}
+      </p>
+    </div>
+
+    <div class="group">
+      <label class="label">{{ t("settings.dock") }}</label>
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          :checked="store.settings?.dock.enabled ?? false"
+          @change="onToggleDockEnabled"
+        />
+        <span>{{ t("settings.enableDock") }}</span>
+      </label>
+      <div class="dock-row">
+        <span class="dock-label">{{ t("settings.dockPosition") }}</span>
+        <select
+          class="select"
+          :value="store.settings?.dock.position ?? 'right'"
+          @change="onChangeDockPosition"
+        >
+          <option value="left">{{ t("settings.left") }}</option>
+          <option value="right">{{ t("settings.right") }}</option>
+        </select>
+      </div>
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          :checked="store.settings?.dock.alwaysOnTop ?? true"
+          @change="onToggleDockAlwaysOnTop"
+        />
+        <span>{{ t("settings.alwaysOnTop") }}</span>
+      </label>
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          :checked="store.settings?.dock.autoHide ?? true"
+          @change="onToggleDockAutoHide"
+        />
+        <span>{{ t("settings.autoHide") }}</span>
+      </label>
+      <p v-if="dockFeedback" class="feedback" :class="{ ok: !dockIsError }">
+        {{ dockFeedback }}
       </p>
     </div>
   </div>
@@ -189,6 +287,18 @@ input:focus {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.dock-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dock-label {
+  width: 120px;
+  color: var(--text-dim);
+  font-size: 12px;
 }
 
 .shortcut-label {

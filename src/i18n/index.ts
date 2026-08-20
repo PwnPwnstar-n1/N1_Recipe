@@ -42,5 +42,6 @@ export function localizeError(err: unknown): string {
     return t("errors.shortcutRegistrationFailed");
   if (msg.startsWith("failed to bind shortcut handler"))
     return t("errors.shortcutRegistrationFailed");
+  if (msg.startsWith("invalid dock")) return t("errors.dockInvalid");
   return msg;
 }

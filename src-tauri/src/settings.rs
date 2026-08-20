@@ -17,6 +17,9 @@ pub struct Settings {
     /// Quick launcher settings (global shortcut).
     #[serde(default)]
     pub launcher: LauncherSettings,
+    /// Desktop edge dock settings.
+    #[serde(default)]
+    pub dock: DockSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -35,6 +38,68 @@ impl Default for LauncherSettings {
             shortcut: "Ctrl+Alt+Space".into(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DockSettings {
+    /// Whether the dock is visible (collapsed handle at the screen edge).
+    pub enabled: bool,
+    /// "left" | "right" — which screen edge the dock anchors to.
+    pub position: String,
+    /// Collapse on mouse leave after `hide_delay`.
+    pub auto_hide: bool,
+    /// Keep the dock above other windows.
+    pub always_on_top: bool,
+    /// Collapsed handle width in logical pixels.
+    pub collapsed_width: u32,
+    /// Expanded width in logical pixels.
+    pub expanded_width: u32,
+    /// Mouse-leave delay before collapsing, in milliseconds.
+    pub hide_delay: u32,
+}
+
+impl Default for DockSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            position: "right".into(),
+            auto_hide: true,
+            always_on_top: true,
+            collapsed_width: 8,
+            expanded_width: 360,
+            hide_delay: 400,
+        }
+    }
+}
+
+/// Validate dock settings; returns a localized-able error message.
+pub fn validate_dock(dock: &DockSettings) -> Result<(), String> {
+    if dock.position != "left" && dock.position != "right" {
+        return Err(format!(
+            "invalid dock position: {:?} (expected \"left\" or \"right\")",
+            dock.position
+        ));
+    }
+    if !(4..=32).contains(&dock.collapsed_width) {
+        return Err(format!(
+            "invalid dock collapsedWidth: {} (expected 4..=32)",
+            dock.collapsed_width
+        ));
+    }
+    if !(320..=400).contains(&dock.expanded_width) {
+        return Err(format!(
+            "invalid dock expandedWidth: {} (expected 320..=400)",
+            dock.expanded_width
+        ));
+    }
+    if !(100..=2000).contains(&dock.hide_delay) {
+        return Err(format!(
+            "invalid dock hideDelay: {} (expected 100..=2000)",
+            dock.hide_delay
+        ));
+    }
+    Ok(())
 }
 
 pub const SUPPORTED_LANGUAGES: [&str; 2] = ["zh-CN", "en-US"];
@@ -173,6 +238,7 @@ mod tests {
                 enabled: true,
                 shortcut: "Ctrl+Shift+Space".into(),
             },
+            ..Default::default()
         };
         save(&path, &settings).unwrap();
         let loaded = load(&path).unwrap();
@@ -254,5 +320,61 @@ mod tests {
                 "{invalid:?} should be rejected"
             );
         }
+    }
+
+    #[test]
+    fn dock_defaults() {
+        let settings = load(&temp_path("dock-defaults")).unwrap();
+        let dock = &settings.dock;
+        assert!(!dock.enabled);
+        assert_eq!(dock.position, "right");
+        assert!(dock.auto_hide);
+        assert!(dock.always_on_top);
+        assert_eq!(dock.collapsed_width, 8);
+        assert_eq!(dock.expanded_width, 360);
+        assert_eq!(dock.hide_delay, 400);
+    }
+
+    #[test]
+    fn dock_section_partial_falls_back_per_field() {
+        let path = temp_path("dock-partial");
+        std::fs::write(&path, r#"{ "dock": { "enabled": true, "position": "left" } }"#).unwrap();
+        let loaded = load(&path).unwrap();
+        assert!(loaded.dock.enabled);
+        assert_eq!(loaded.dock.position, "left");
+        assert_eq!(loaded.dock.collapsed_width, 8); // default
+        assert_eq!(loaded.dock.expanded_width, 360);
+        assert_eq!(loaded.dock.hide_delay, 400);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn dock_validation() {
+        let mut dock = DockSettings::default();
+        assert!(validate_dock(&dock).is_ok());
+
+        dock.position = "top".into();
+        assert!(validate_dock(&dock).is_err());
+        dock.position = "right".into();
+
+        dock.collapsed_width = 3;
+        assert!(validate_dock(&dock).is_err());
+        dock.collapsed_width = 33;
+        assert!(validate_dock(&dock).is_err());
+        dock.collapsed_width = 8;
+
+        dock.expanded_width = 319;
+        assert!(validate_dock(&dock).is_err());
+        dock.expanded_width = 401;
+        assert!(validate_dock(&dock).is_err());
+        dock.expanded_width = 360;
+
+        dock.hide_delay = 99;
+        assert!(validate_dock(&dock).is_err());
+        dock.hide_delay = 2001;
+        assert!(validate_dock(&dock).is_err());
+        dock.hide_delay = 400;
+
+        assert!(validate_dock(&dock).is_ok());
     }
 }

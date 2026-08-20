@@ -13,7 +13,7 @@ SnipDeck will have three window roles (window label = role, see
 | -------- | --------- | ------------------------------------------ | ------------- |
 | Main     | `main`    | Full management UI (edit / categories / settings) | implemented   |
 | Launcher | `launcher`| Global-shortcut quick search + Enter copy  | implemented (Phase 3) |
-| Dock     | `dock`    | Edge-docked quick access panel             | planned only  |
+| Dock     | `dock`    | Edge-docked quick access panel             | implemented (Phase 4) |
 
 Rules:
 
@@ -66,27 +66,35 @@ valid):
 }
 ```
 
-## Edge Dock Design (future, not implemented)
+## Edge Dock Design (implemented in Phase 4)
 
 Goal: a slim always-available panel docked to the left or right screen edge.
 
-- **Collapsed**: only a ~6–10px handle remains visible at the screen edge.
-- **Expand**: mouse enters the handle → window expands to ~320–400px.
-- **Collapse**: mouse leaves → wait `hideDelay` (~300–500ms) → collapse back
-  to handle width.
-- **Placement**: `dock.position` = `left` | `right`; use the display's work
-  area (respect taskbar) for full-height positioning; `alwaysOnTop` keeps it
-  above other windows.
-- **Content**: Search / Favorites / Recent lists, sharing the same backend
-  services and the variable dialog as the main window.
-- **First version explicitly does NOT use a global mouse hook**: rely on the
-  always-visible edge handle plus the Tauri window's mouse enter/leave
-  events (`on_window_event`, `MouseEnter` / `MouseLeave` + a hide timer).
-  A global hook is a later optimization only if real-world usage shows the
-  enter/leave approach is insufficient.
-- **First version also does not use reserved screen-edge areas**: the
-  collapsed handle is an ordinary small always-on-top window; reserved
-  edges / work-area re-layout are future refinements.
+- **Collapsed**: an 8px handle remains visible at the screen edge (never
+  fully off-screen — mouse enter/leave drives the transitions, no global
+  mouse hook).
+- **Expand**: mouse enters the handle → window expands to 360px
+  (logical), anchored to the same edge; full primary-monitor work-area
+  height (respects the taskbar; logical-pixel math handles DPI).
+- **Collapse**: mouse leaves → wait `hideDelay` (default 400ms) → collapse
+  back to handle width. Re-entering cancels the pending collapse; a
+  generation counter invalidates stale timers. An open variable dialog
+  pins the dock open. Copy success collapses after a brief "Copied"
+  feedback.
+- **Placement**: `dock.position` = `left` | `right`, primary monitor's
+  work area; `alwaysOnTop` optional (default true); toggles apply
+  immediately, no restart.
+- **Content**: Search (backend search) / Favorites / Recent, Enter to copy
+  (variable dialog for templates), Esc to collapse — no CRUD/editor.
+- **Lifecycle**: created hidden at startup, runtime show/hide/resize/
+  reposition only — NEVER destroyed (same wry constraint as the
+  launcher). Geometry commands are idempotent (skip when the width
+  already matches) so enter/leave bursts cannot pile up a command backlog.
+- **First version explicitly does NOT use a global mouse hook**: relies on
+  the always-visible edge handle plus the window's mouse enter/leave.
+- **No reserved screen-edge areas**: the collapsed handle is an ordinary
+  small always-on-top window; reserved edges / work-area re-layout are
+  future refinements.
 
 ## i18n
 

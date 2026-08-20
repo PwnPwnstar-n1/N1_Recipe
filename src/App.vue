@@ -23,17 +23,19 @@ import SnippetEditor from "./components/SnippetEditor.vue";
 import TemplateVariableDialog from "./components/TemplateVariableDialog.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import LauncherView from "./components/LauncherView.vue";
+import DockView from "./components/DockView.vue";
 
 const { t } = useI18n();
 
 // Multi-window foundation: each window renders this app bundle and picks its
 // role from the window label. Only the main window boots the management UI.
-const isLauncher = ref(false);
+type WindowRole = "main" | "launcher" | "dock";
+const windowRole = ref<WindowRole>("main");
 
 onMounted(async () => {
-  isLauncher.value = await detectWindowRole();
+  windowRole.value = await detectWindowRole();
   await initSettings();
-  if (!isLauncher.value) {
+  if (windowRole.value === "main") {
     void refresh();
     focusSearch();
     window.addEventListener("keydown", onGlobalKeydown);
@@ -44,13 +46,16 @@ onUnmounted(() => {
   window.removeEventListener("keydown", onGlobalKeydown);
 });
 
-async function detectWindowRole(): Promise<boolean> {
+async function detectWindowRole(): Promise<WindowRole> {
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    return getCurrentWindow().label === "launcher";
+    const label = getCurrentWindow().label;
+    if (label === "launcher") return "launcher";
+    if (label === "dock") return "dock";
+    return "main";
   } catch {
     // plain browser (vite without Tauri) — assume main
-    return false;
+    return "main";
   }
 }
 
@@ -116,7 +121,8 @@ function onGlobalKeydown(e: KeyboardEvent): void {
 </script>
 
 <template>
-  <LauncherView v-if="isLauncher" />
+  <LauncherView v-if="windowRole === 'launcher'" />
+  <DockView v-else-if="windowRole === 'dock'" />
 
   <div v-else class="app">
     <Sidebar />

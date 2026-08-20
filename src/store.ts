@@ -100,6 +100,20 @@ export async function updateLauncherSettings(patch: {
   }
 }
 
+/// Persist dock settings and apply them immediately (geometry/visibility).
+/// Returns null on success or a localized error string on failure.
+export async function updateDockSettings(
+  patch: api.Settings["dock"],
+): Promise<string | null> {
+  try {
+    const saved = await api.updateDockSettings(patch);
+    store.settings = saved;
+    return null;
+  } catch (err) {
+    return localizeError(err);
+  }
+}
+
 export function toggleSettings(): void {
   store.settingsOpen = !store.settingsOpen;
 }

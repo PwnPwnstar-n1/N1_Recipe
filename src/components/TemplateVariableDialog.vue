@@ -40,7 +40,11 @@ function onKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
     onCancel();
   } else if (e.key === "Enter") {
+    // stopPropagation matters: window-level keydown listeners (launcher,
+    // dock) would otherwise see this same Enter after the dialog closes
+    // and re-trigger a copy/dialog on the still-selected result.
     e.preventDefault();
+    e.stopPropagation();
     onConfirm();
   }
 }

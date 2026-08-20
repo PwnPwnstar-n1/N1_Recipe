@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 /// Window roles. Every window of SnipDeck belongs to exactly one role; the
 /// role is the window label, so `main` / `launcher` / `dock` stay the single
@@ -9,7 +9,8 @@ pub mod roles {
     /// Quick launcher window — created hidden at startup, shown/hidden at
     /// runtime, never destroyed.
     pub const LAUNCHER: &str = "launcher";
-    /// Desktop edge dock (later phase) — not created yet.
+    /// Desktop edge dock — created hidden at startup, shown/hidden and
+    /// resized/repositioned at runtime, never destroyed.
     pub const DOCK: &str = "dock";
 }
 
@@ -49,6 +50,99 @@ pub fn ensure_hidden_launcher<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(
     if get(app, roles::LAUNCHER).is_none() {
         create_launcher(app)?;
     }
+    Ok(())
+}
+
+/// Create the (hidden) dock window. Called ONLY during app setup (main
+/// thread); at runtime the dock is shown/hidden/resized/repositioned but
+/// NEVER destroyed (same wry deadlock constraint as the launcher).
+pub fn create_dock<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<WebviewWindow<R>> {
+    WebviewWindowBuilder::new(app, roles::DOCK, WebviewUrl::App("index.html".into()))
+        .title("SnipDeck")
+        .inner_size(360.0, 600.0)
+        .resizable(false)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()
+}
+
+/// Ensure the dock window exists (hidden) — called once at startup.
+pub fn ensure_hidden_dock<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    if get(app, roles::DOCK).is_none() {
+        create_dock(app)?;
+    }
+    Ok(())
+}
+
+/// Whether the dock's current logical width already matches the expanded
+/// width. Used to make geometry commands idempotent so bursts of
+/// enter/leave events cannot pile up a command backlog that executes after
+/// the user's intent has moved on.
+pub fn dock_matches_width<R: Runtime>(
+    window: &WebviewWindow<R>,
+    target_logical: f64,
+) -> tauri::Result<bool> {
+    let scale = window.scale_factor().unwrap_or(1.0).max(0.1);
+    let size = window.inner_size()?;
+    let logical = size.width as f64 / scale;
+    Ok((logical - target_logical).abs() < 1.0)
+}
+
+/// Anchor the dock to the left/right edge of the PRIMARY monitor's work
+/// area (respects the taskbar) and set its size to the collapsed or
+/// expanded width with full work-area height. All calculations are done in
+/// logical pixels via the monitor's scale factor, so mixed-DPI setups stay
+/// correct. The window is borderless, so inner size == outer size.
+pub fn apply_dock_geometry<R: Runtime>(
+    window: &WebviewWindow<R>,
+    dock: &crate::settings::DockSettings,
+    expanded: bool,
+) -> tauri::Result<()> {
+    let monitor = window
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.current_monitor().ok().flatten());
+
+    if let Some(monitor) = monitor {
+        let scale = monitor.scale_factor();
+        let work = monitor.work_area();
+        let work_x = work.position.x as f64 / scale;
+        let work_y = work.position.y as f64 / scale;
+        let work_w = work.size.width as f64 / scale;
+        let work_h = work.size.height as f64 / scale;
+
+        let width = if expanded {
+            dock.expanded_width as f64
+        } else {
+            dock.collapsed_width as f64
+        };
+        let x = if dock.position == "left" {
+            work_x
+        } else {
+            work_x + work_w - width
+        };
+
+        window.set_position(LogicalPosition::new(x, work_y))?;
+        window.set_size(LogicalSize::new(width, work_h))?;
+    }
+    Ok(())
+}
+
+/// Apply the persisted dock settings to the dock window (geometry +
+/// always-on-top) without changing its visibility.
+pub fn apply_dock_settings<R: Runtime>(
+    app: &AppHandle<R>,
+    dock: &crate::settings::DockSettings,
+) -> Result<(), String> {
+    let window = get(app, roles::DOCK)
+        .ok_or_else(|| "dock window not initialized".to_string())?;
+    window
+        .set_always_on_top(dock.always_on_top)
+        .map_err(|e| e.to_string())?;
+    apply_dock_geometry(&window, dock, false).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -104,5 +198,19 @@ pub fn toggle_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Stri
         hide_launcher_window(app)
     } else {
         show_launcher_window(app)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::roles;
+
+    /// The window-label contract: frontend routing, capabilities and the
+    /// runtime harness all depend on these exact labels.
+    #[test]
+    fn window_role_labels_contract() {
+        assert_eq!(roles::MAIN, "main");
+        assert_eq!(roles::LAUNCHER, "launcher");
+        assert_eq!(roles::DOCK, "dock");
     }
 }

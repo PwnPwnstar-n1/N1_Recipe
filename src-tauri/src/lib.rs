@@ -24,9 +24,23 @@ pub fn run() {
             app.manage(Db(Mutex::new(conn)));
             app.manage(Mutex::new(shortcut::ShortcutManager::default()));
 
-            // Multi-window foundation: the launcher window exists (hidden)
-            // from startup; runtime only shows/hides it.
+            // Multi-window foundation: launcher and dock windows exist
+            // (hidden) from startup; runtime only shows/hides/resizes them.
             windows::ensure_hidden_launcher(app.handle())?;
+            windows::ensure_hidden_dock(app.handle())?;
+
+            // Apply persisted dock geometry/visibility (collapsed handle at
+            // the screen edge when enabled, hidden otherwise).
+            {
+                let settings = settings::load(&settings::app_settings_path(app.handle())?)
+                    .unwrap_or_default();
+                if settings.dock.enabled {
+                    if let Some(window) = windows::get(app.handle(), windows::roles::DOCK) {
+                        let _ = windows::apply_dock_geometry(&window, &settings.dock, false);
+                        let _ = window.show();
+                    }
+                }
+            }
 
             // Global shortcut lifecycle: register once at startup from the
             // persisted settings. Registration failure must NOT prevent the
@@ -65,6 +79,9 @@ pub fn run() {
             commands::update_launcher_settings,
             commands::show_launcher,
             commands::hide_launcher,
+            commands::apply_dock_settings,
+            commands::expand_dock,
+            commands::collapse_dock,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SnipDeck");
