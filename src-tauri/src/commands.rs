@@ -134,6 +134,30 @@ pub fn set_language<R: tauri::Runtime>(
     let mut current = settings::load(&path)?;
     current.language = Some(language);
     settings::save(&path, &current)?;
+    // Keep the tray menu labels in sync with the UI language.
+    let _ = crate::tray::rebuild_tray_menu(&app);
+    Ok(current)
+}
+
+/// Persist startup behavior and reconcile the OS autostart registration.
+/// `settings.json` is the single source of truth; on a registration failure
+/// the persisted flag is reverted so the UI never disagrees with the OS.
+#[tauri::command]
+pub fn update_startup_settings<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    startup: crate::settings::StartupSettings,
+) -> CmdResult<Settings> {
+    let path = settings::app_settings_path(&app)?;
+    let mut current = settings::load(&path)?;
+    let old = current.startup.clone();
+    current.startup = startup.clone();
+    settings::save(&path, &current)?;
+
+    if let Err(e) = crate::tray::reconcile_autostart(&app, startup.launch_on_boot) {
+        current.startup = old;
+        let _ = settings::save(&path, &current);
+        return Err(format!("autostart failed: {e}"));
+    }
     Ok(current)
 }
 
@@ -198,6 +222,32 @@ pub fn hide_launcher<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
 // destroyed at runtime.
 // ---------------------------------------------------------------------------
 
+/// Apply dock visibility + geometry + always-on-top to the dock window and
+/// broadcast the resulting state. Shared by the settings command and the tray
+/// dock toggle; never destroys the dock window.
+pub fn apply_dock_state<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    dock: &crate::settings::DockSettings,
+) -> CmdResult<()> {
+    let window = crate::windows::get(app, crate::windows::roles::DOCK)
+        .ok_or_else(|| "dock window not initialized".to_string())?;
+    window
+        .set_always_on_top(dock.always_on_top)
+        .map_err(map_err)?;
+    crate::windows::apply_dock_geometry(&window, dock, false).map_err(map_err)?;
+
+    if dock.enabled {
+        window.show().map_err(map_err)?;
+        app.emit("dock:settings", dock).map_err(map_err)?;
+        app.emit("dock:state", "collapsed").map_err(map_err)?;
+    } else {
+        window.hide().map_err(map_err)?;
+        app.emit("dock:settings", dock).map_err(map_err)?;
+        app.emit("dock:state", "hidden").map_err(map_err)?;
+    }
+    Ok(())
+}
+
 /// Persist dock settings and apply them immediately: position + size
 /// (collapsed geometry), always-on-top, and show/hide per `enabled`.
 #[tauri::command]
@@ -211,22 +261,9 @@ pub fn apply_dock_settings<R: tauri::Runtime>(
     current.dock = dock.clone();
     settings::save(&path, &current)?;
 
-    let window = crate::windows::get(&app, crate::windows::roles::DOCK)
-        .ok_or_else(|| "dock window not initialized".to_string())?;
-    window
-        .set_always_on_top(dock.always_on_top)
-        .map_err(map_err)?;
-    crate::windows::apply_dock_geometry(&window, &dock, false).map_err(map_err)?;
-
-    if dock.enabled {
-        window.show().map_err(map_err)?;
-        app.emit("dock:settings", &dock).map_err(map_err)?;
-        app.emit("dock:state", "collapsed").map_err(map_err)?;
-    } else {
-        window.hide().map_err(map_err)?;
-        app.emit("dock:settings", &dock).map_err(map_err)?;
-        app.emit("dock:state", "hidden").map_err(map_err)?;
-    }
+    apply_dock_state(&app, &dock)?;
+    // The tray's Show/Hide Dock label tracks dock.enabled.
+    let _ = crate::tray::rebuild_tray_menu(&app);
     Ok(current)
 }
 

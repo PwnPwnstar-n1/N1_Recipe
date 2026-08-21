@@ -9,6 +9,7 @@ import {
   store,
   updateDockSettings,
   updateLauncherSettings,
+  updateStartupSettings,
 } from "../store";
 import type { AppLocale } from "../i18n";
 
@@ -133,6 +134,38 @@ function onToggleDockAlwaysOnTop(e: Event): void {
 function onToggleDockAutoHide(e: Event): void {
   const target = e.target as HTMLInputElement;
   void commitDock({ autoHide: target.checked });
+}
+
+// Startup behavior (autostart + start-hidden)
+const startupFeedback = ref("");
+const startupIsError = ref(false);
+
+function currentStartup(): api.Settings["startup"] {
+  return store.settings?.startup ?? { launchOnBoot: false, startHidden: true };
+}
+
+async function commitStartup(
+  patch: Partial<api.Settings["startup"]>,
+): Promise<void> {
+  const next = { ...currentStartup(), ...patch };
+  const error = await updateStartupSettings(next);
+  if (error !== null) {
+    startupFeedback.value = error;
+    startupIsError.value = true;
+  } else {
+    startupFeedback.value = "";
+    startupIsError.value = false;
+  }
+}
+
+function onToggleLaunchOnBoot(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  void commitStartup({ launchOnBoot: target.checked });
+}
+
+function onToggleStartHidden(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  void commitStartup({ startHidden: target.checked });
 }
 
 // Backup & restore
@@ -263,6 +296,29 @@ async function onImport(): Promise<void> {
       </label>
       <p v-if="dockFeedback" class="feedback" :class="{ ok: !dockIsError }">
         {{ dockFeedback }}
+      </p>
+    </div>
+
+    <div class="group">
+      <label class="label">{{ t("settings.startup") }}</label>
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          :checked="store.settings?.startup.launchOnBoot ?? false"
+          @change="onToggleLaunchOnBoot"
+        />
+        <span>{{ t("settings.launchOnBoot") }}</span>
+      </label>
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          :checked="store.settings?.startup.startHidden ?? true"
+          @change="onToggleStartHidden"
+        />
+        <span>{{ t("settings.startHidden") }}</span>
+      </label>
+      <p v-if="startupFeedback" class="feedback" :class="{ ok: !startupIsError }">
+        {{ startupFeedback }}
       </p>
     </div>
 

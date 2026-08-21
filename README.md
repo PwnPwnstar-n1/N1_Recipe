@@ -1,24 +1,57 @@
 # SnipDeck
 
-Personal Snippet / Prompt / Payload / Template Quick Launcher.
+Local-first Snippet / Prompt / Payload / Template Quick Launcher.
 
 Windows-first, local-first desktop tool for searching, finding and copying
 frequently used text: AI prompts, security payloads, EXP templates, shell
-commands, curl / HTTP templates and more.
+commands, curl / HTTP templates and more. All data stays on your machine.
+
+## Core features
+
+- Snippet management (title / content / type / category / language / tags / aliases)
+- Search across title, aliases, tags, category and content
+- Template variables (`{{name}}`) with system variables (`{{datetime}}`, `{{clipboard}}`, …)
+- Global Quick Launcher — search and copy from anywhere
+- Desktop Edge Dock — hover-to-expand panel pinned to a screen edge
+- zh-CN / en-US
+- JSON Backup / Restore (Settings → Data)
+- System tray with close-to-tray and Windows startup support
+
+## Default shortcut
+
+```
+Ctrl + Alt + Space
+```
+
+opens / closes the Quick Launcher.
+
+## Data directory
+
+```
+%APPDATA%\com.snipdeck.app\
+├── snipdeck.db     # your snippets (SQLite)
+└── settings.json   # language / launcher / dock / startup
+```
+
+## Quitting
+
+The Main Window's **X** hides SnipDeck to the tray (the launcher, dock and
+global shortcut keep working). To actually exit:
+
+```
+System Tray → Quit SnipDeck
+```
+
+## Backup
+
+```
+Settings → Data → Export Data / Import Data
+```
 
 ## Stack
 
-- Tauri 2 (Rust backend)
-- Vue 3 + TypeScript + Vite (frontend)
+- Tauri 2 (Rust backend) + Vue 3 + TypeScript + Vite (frontend)
 - SQLite (rusqlite, bundled — no system dependency)
-
-## Features (Phase 1)
-
-- Snippet CRUD with title / content / type / category / language / tags / aliases
-- Search across title, aliases, tags, category and content (substring + subsequence fallback, so `rtl` finds `ret2libc`)
-- Views: All, Favorites, Recent, Most Used, per-category
-- One-click copy to system clipboard (usage_count +1, last-used updated)
-- Keyboard driven: `↑↓` navigate, `Enter` copy, `Ctrl+E` edit, `Ctrl+N` new, `Ctrl+F` search
 
 ## Development
 
@@ -32,8 +65,3 @@ npm run tauri dev
 ```sh
 npm run tauri build
 ```
-
-## Data
-
-SQLite database lives in the app data directory
-(`%APPDATA%\com.snipdeck.app\snipdeck.db` on Windows).

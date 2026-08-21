@@ -85,6 +85,9 @@ export default {
     backup: "备份与恢复",
     exportData: "导出数据",
     importData: "导入数据",
+    startup: "启动",
+    launchOnBoot: "Windows 启动时自动运行 SnipDeck",
+    startHidden: "开机启动时静默运行（仅托盘）",
   },
   dock: {
     placeholder: "搜索 Snippet...",
@@ -121,6 +124,7 @@ export default {
     unsupportedBackupVersion: "备份版本不支持",
     invalidSnippetType: "Snippet 类型无效",
     missingRequiredField: "缺少必需字段",
+    autostartFailed: "更新 Windows 开机启动注册失败",
   },
   time: {
     never: "从未使用",

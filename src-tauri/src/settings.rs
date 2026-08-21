@@ -20,6 +20,9 @@ pub struct Settings {
     /// Desktop edge dock settings.
     #[serde(default)]
     pub dock: DockSettings,
+    /// Startup behavior (autostart + start-hidden).
+    #[serde(default)]
+    pub startup: StartupSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -69,6 +72,25 @@ impl Default for DockSettings {
             collapsed_width: 8,
             expanded_width: 360,
             hide_delay: 400,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StartupSettings {
+    /// Register SnipDeck to launch when Windows starts (autostart).
+    pub launch_on_boot: bool,
+    /// When launched by Windows autostart, start hidden to the tray instead
+    /// of popping the main window. Manual launches always show the window.
+    pub start_hidden: bool,
+}
+
+impl Default for StartupSettings {
+    fn default() -> Self {
+        Self {
+            launch_on_boot: false,
+            start_hidden: true,
         }
     }
 }
@@ -345,6 +367,42 @@ mod tests {
         assert_eq!(loaded.dock.collapsed_width, 8); // default
         assert_eq!(loaded.dock.expanded_width, 360);
         assert_eq!(loaded.dock.hide_delay, 400);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn startup_defaults() {
+        let settings = load(&temp_path("startup-defaults")).unwrap();
+        assert!(!settings.startup.launch_on_boot);
+        assert!(settings.startup.start_hidden);
+    }
+
+    #[test]
+    fn startup_section_partial_falls_back_per_field() {
+        let path = temp_path("startup-partial");
+        std::fs::write(&path, r#"{ "startup": { "launchOnBoot": true } }"#).unwrap();
+        let loaded = load(&path).unwrap();
+        assert!(loaded.startup.launch_on_boot);
+        assert!(loaded.startup.start_hidden); // default preserved
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn startup_roundtrip() {
+        let path = temp_path("startup-roundtrip");
+        let settings = Settings {
+            startup: StartupSettings {
+                launch_on_boot: true,
+                start_hidden: false,
+            },
+            ..Default::default()
+        };
+        save(&path, &settings).unwrap();
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert!(raw.contains("\"launchOnBoot\": true"), "camelCase key");
+        assert!(raw.contains("\"startHidden\": false"), "camelCase key");
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.startup, settings.startup);
         let _ = std::fs::remove_file(&path);
     }
 

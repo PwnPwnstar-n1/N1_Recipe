@@ -171,6 +171,20 @@ pub fn position_launcher<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result
     Ok(())
 }
 
+/// Single restore entry point for the MAIN window: show + unminimize +
+/// focus. Shared by the tray "Open SnipDeck" action and the single-instance
+/// second-launch callback so the restore behavior stays consistent. It never
+/// moves/resizes the window, so the user's chosen monitor/position is
+/// preserved unless the window is already off-screen.
+pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let window = get(app, roles::MAIN)
+        .ok_or_else(|| "main window not initialized".to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Position + show + focus the launcher. The window is created once at
 /// startup and NEVER destroyed at runtime.
 pub fn show_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {

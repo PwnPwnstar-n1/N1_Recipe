@@ -175,3 +175,35 @@ the Snippet library only.
 A simple generated placeholder icon (dark rounded square + "SD") is used for
 now (`src-tauri/icons/*`). A professionally designed icon is a non-blocking
 follow-up.
+
+## Desktop Lifecycle (Phase 5B)
+
+- **Single instance** (`tauri-plugin-single-instance`): a named mutex +
+  message window keyed on the identifier. A second launch sends its args to
+  the running instance (which restores the main window) and exits *before*
+  opening SQLite — there is never a second DB/runtime/tray/launcher/dock.
+- **Windows** (`main` / `launcher` / `dock`) are created exactly once at
+  startup and only show/hide at runtime (never destroyed; wry deadlock
+  constraint). The restore entry point `windows::show_main_window` does
+  show + unminimize + focus without moving/resizing, and is shared by the
+  tray "Open" action and the single-instance callback.
+- **System tray** (`src-tauri/src/tray.rs`): a single tray icon
+  (id `main-tray`). Left click restores main; right click opens the menu
+  (Open / Quick Launcher / Show-Hide Dock / Quit). The menu is rebuilt in
+  place via `set_menu` on language or dock-state changes — never a second
+  icon. Menu item ids are a stable contract (`open` / `launcher` /
+  `dock_toggle` / `quit`).
+- **Close-to-tray**: the main window's X sets `api.prevent_close()` and hides
+  the window (tray, shortcut, launcher and dock stay alive). A `QuitState`
+  flag flips to true on tray "Quit" so the close handler lets every window
+  close and the process exits cleanly (no `taskkill`).
+- **Startup** (`tauri-plugin-autostart`): registers the exe with a
+  `--autostart` argument. `settings.json` is the single source of truth and
+  is reconciled against the OS Run-key on every launch and change. When
+  `startup.startHidden` is true, an autostart launch starts to the tray
+  (manual launches always show main).
+- **Release**: must be built with `tauri build` — it enables the
+  `tauri/custom-protocol` feature so the frontend is served from embedded
+  assets (`frontendDist`) instead of the `devUrl`. A raw
+  `cargo build --release` without that feature still points at the Vite dev
+  server, which is the Phase 2.5 dev-URL blind spot this phase closes.

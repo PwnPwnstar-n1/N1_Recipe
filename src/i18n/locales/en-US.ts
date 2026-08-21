@@ -85,6 +85,9 @@ export default {
     backup: "Backup & Restore",
     exportData: "Export Data",
     importData: "Import Data",
+    startup: "Startup",
+    launchOnBoot: "Launch SnipDeck when Windows starts",
+    startHidden: "Start hidden (tray only) when launched on boot",
   },
   dock: {
     placeholder: "Search snippets...",
@@ -122,6 +125,7 @@ export default {
     unsupportedBackupVersion: "Unsupported backup version",
     invalidSnippetType: "Invalid snippet type",
     missingRequiredField: "Missing required field",
+    autostartFailed: "Failed to update Windows startup registration",
   },
   time: {
     never: "never",

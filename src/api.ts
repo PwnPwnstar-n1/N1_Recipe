@@ -76,6 +76,10 @@ export interface Settings {
     expandedWidth: number;
     hideDelay: number;
   };
+  startup: {
+    launchOnBoot: boolean;
+    startHidden: boolean;
+  };
 }
 
 export function getSettings(): Promise<Settings> {
@@ -95,6 +99,12 @@ export function updateLauncherSettings(launcher: {
 
 export function updateDockSettings(dock: Settings["dock"]): Promise<Settings> {
   return call<Settings>("apply_dock_settings", { dock });
+}
+
+export function updateStartupSettings(
+  startup: Settings["startup"],
+): Promise<Settings> {
+  return call<Settings>("update_startup_settings", { startup });
 }
 
 export function expandDock(): Promise<void> {

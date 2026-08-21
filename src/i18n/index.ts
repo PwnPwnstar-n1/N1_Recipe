@@ -50,5 +50,6 @@ export function localizeError(err: unknown): string {
     return t("errors.unsupportedBackupVersion");
   if (msg.startsWith("invalid snippet type")) return t("errors.invalidSnippetType");
   if (msg.startsWith("missing required field")) return t("errors.missingRequiredField");
+  if (msg.startsWith("autostart failed")) return t("errors.autostartFailed");
   return msg;
 }

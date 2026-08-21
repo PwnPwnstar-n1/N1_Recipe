@@ -114,6 +114,21 @@ export async function updateDockSettings(
   }
 }
 
+/// Persist startup behavior (autostart + start-hidden). Returns null on
+/// success or a localized error string on failure (on failure the backend
+/// reverts the flag so the UI never disagrees with the OS registration).
+export async function updateStartupSettings(
+  patch: api.Settings["startup"],
+): Promise<string | null> {
+  try {
+    const saved = await api.updateStartupSettings(patch);
+    store.settings = saved;
+    return null;
+  } catch (err) {
+    return localizeError(err);
+  }
+}
+
 export function toggleSettings(): void {
   store.settingsOpen = !store.settingsOpen;
 }
