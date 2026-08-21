@@ -106,3 +106,72 @@ Goal: a slim always-available panel docked to the left or right screen edge.
 - Backend errors stay stable English strings; `localizeError()` in
   `src/i18n/index.ts` maps them to localized UI text.
 - User data (title/content/category/tag/alias) is NEVER translated.
+
+## Backup Format v1 (Phase 5A)
+
+Stable interchange format for the Snippet library. Managed by
+`src-tauri/src/backup.rs` — NOT a raw SQLite dump.
+
+```jsonc
+{
+  "format": "snipdeck-backup",
+  "version": 1,
+  "exportedAt": "2026-08-20T12:34:56+08:00",   // RFC3339
+  "snippets": [
+    {
+      "title": "...", "content": "...", "type": "PROMPT",
+      "category": "...", "language": "...",
+      "tags": [], "aliases": [],
+      "favorite": false, "usageCount": 0,
+      "createdAt": 1234567890, "updatedAt": 1234567890
+    }
+  ]
+}
+```
+
+- `id` is intentionally absent: database ids are not a migration identity.
+- UTF-8, pretty-printed (2-space indent); Unicode / multi-line content is
+  preserved verbatim.
+- `version` is the compatibility gate: future versions may extend the shape
+  only by adding optional fields; `version = 1` files must keep loading.
+
+## Import Strategy (Phase 5A)
+
+First version is **Merge only** (no Replace All):
+
+1. Parse + validate the ENTIRE file (format, version, every snippet) before
+   any database write.
+2. One transaction: for each snippet —
+   - exact duplicate (`title` + `content` + `type` all equal) → skip;
+   - otherwise → insert with a NEW id, preserving `favorite`, `usage_count`,
+     `created_at`, `updated_at`, `tags`, `aliases`.
+3. Any error → whole transaction rolls back; the library is never partially
+   imported.
+4. Result summary: `added` / `skippedDuplicates` / `failed` (failed is
+   always 0 — failures abort the whole import).
+
+App settings are deliberately NOT part of the backup; the backup migrates
+the Snippet library only.
+
+## App Data & Release
+
+- SQLite database: `%APPDATA%\com.snipdeck.app\snipdeck.db`
+  (created/opened at startup; seeded only when brand-new).
+- Settings: `%APPDATA%\com.snipdeck.app\settings.json`
+  (language / launcher / dock; serde defaults keep old files valid).
+- Version policy: `0.1.0` is the single source in `package.json`,
+  `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` — all three must
+  stay in sync.
+- Product identity: `SnipDeck`, identifier `com.snipdeck.app`.
+- Release artifacts (after `tauri build`):
+  - installer: `src-tauri/target/release/bundle/nsis/SnipDeck_0.1.0_x64-setup.exe`
+  - portable exe: `src-tauri/target/release/snipdeck.exe`
+- Bundle target: NSIS only (Windows-first). The installer does NOT delete
+  `%APPDATA%\com.snipdeck.app` on uninstall — user snippets are never
+  removed by uninstall/reinstall (upgrade-in-place preserves data).
+
+## Icon
+
+A simple generated placeholder icon (dark rounded square + "SD") is used for
+now (`src-tauri/icons/*`). A professionally designed icon is a non-blocking
+follow-up.

@@ -82,6 +82,9 @@ export default {
     right: "右侧",
     alwaysOnTop: "置顶显示",
     autoHide: "自动收起",
+    backup: "备份与恢复",
+    exportData: "导出数据",
+    importData: "导入数据",
   },
   dock: {
     placeholder: "搜索 Snippet...",
@@ -103,6 +106,8 @@ export default {
     deleted: "已删除",
     saved: "已保存",
     created: "已创建",
+    exportCompleted: "导出成功（{count} 条）",
+    importCompleted: "导入完成 — 新增 {added}，跳过重复 {skipped}",
   },
   errors: {
     titleRequired: "标题不能为空",
@@ -110,6 +115,12 @@ export default {
     shortcutInvalid: "快捷键格式无效",
     shortcutRegistrationFailed: "快捷键注册失败 — 可能已被其他应用占用",
     dockInvalid: "Dock 设置无效",
+    exportFailed: "导出失败",
+    importFailed: "导入失败",
+    invalidBackupFormat: "备份格式无效",
+    unsupportedBackupVersion: "备份版本不支持",
+    invalidSnippetType: "Snippet 类型无效",
+    missingRequiredField: "缺少必需字段",
   },
   time: {
     never: "从未使用",

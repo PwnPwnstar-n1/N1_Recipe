@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import * as api from "../api";
+import { localizeError } from "../i18n";
 import {
   changeLanguage,
   store,
@@ -132,6 +134,47 @@ function onToggleDockAutoHide(e: Event): void {
   const target = e.target as HTMLInputElement;
   void commitDock({ autoHide: target.checked });
 }
+
+// Backup & restore
+const backupFeedback = ref("");
+const backupIsError = ref(false);
+
+async function onExport(): Promise<void> {
+  const path = await save({
+    filters: [{ name: "SnipDeck Backup", extensions: ["json"] }],
+    defaultPath: "snipdeck-backup.json",
+  });
+  if (!path) return;
+  try {
+    const count = await api.exportSnippets(path);
+    backupFeedback.value = t("toast.exportCompleted", { count });
+    backupIsError.value = false;
+  } catch (err) {
+    backupFeedback.value = localizeError(err);
+    backupIsError.value = true;
+  }
+}
+
+async function onImport(): Promise<void> {
+  const selected = await open({
+    filters: [{ name: "SnipDeck Backup", extensions: ["json"] }],
+    multiple: false,
+  });
+  if (!selected) return;
+  const path = Array.isArray(selected) ? selected[0] : selected;
+  if (!path) return;
+  try {
+    const summary = await api.importSnippets(path);
+    backupFeedback.value = t("toast.importCompleted", {
+      added: summary.added,
+      skipped: summary.skippedDuplicates,
+    });
+    backupIsError.value = false;
+  } catch (err) {
+    backupFeedback.value = localizeError(err);
+    backupIsError.value = true;
+  }
+}
 </script>
 
 <template>
@@ -222,6 +265,21 @@ function onToggleDockAutoHide(e: Event): void {
         {{ dockFeedback }}
       </p>
     </div>
+
+    <div class="group">
+      <label class="label">{{ t("settings.backup") }}</label>
+      <div class="backup-row">
+        <button class="btn" @click="onExport">
+          {{ t("settings.exportData") }}
+        </button>
+        <button class="btn" @click="onImport">
+          {{ t("settings.importData") }}
+        </button>
+      </div>
+      <p v-if="backupFeedback" class="feedback" :class="{ ok: !backupIsError }">
+        {{ backupFeedback }}
+      </p>
+    </div>
   </div>
 </template>
 
@@ -293,6 +351,11 @@ input:focus {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.backup-row {
+  display: flex;
+  gap: 8px;
 }
 
 .dock-label {

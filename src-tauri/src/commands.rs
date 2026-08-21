@@ -263,3 +263,58 @@ pub fn collapse_dock<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
     app.emit("dock:state", "collapsed").map_err(map_err)?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// JSON backup / restore (Phase 5A)
+// ---------------------------------------------------------------------------
+
+/// Export the whole snippet library to a pretty-printed JSON file. The
+/// database is only read — a failed export never mutates data.
+#[tauri::command]
+pub fn export_snippets(db: State<'_, Db>, path: String) -> CmdResult<u32> {
+    let conn = db.0.lock().map_err(map_err)?;
+    let repo = Repo::new(&conn);
+    let snippets = repo.list(&ListView::All).map_err(map_err)?;
+
+    let backup = crate::backup::BackupFile {
+        format: crate::backup::FORMAT.into(),
+        version: crate::backup::CURRENT_VERSION,
+        exported_at: chrono::Local::now().to_rfc3339(),
+        snippets: snippets
+            .into_iter()
+            .map(|s| crate::backup::BackupSnippet {
+                title: s.title,
+                content: s.content,
+                r#type: s.r#type.as_str().to_string(),
+                category: s.category,
+                language: s.language,
+                tags: s.tags,
+                aliases: s.aliases,
+                favorite: s.favorite,
+                usage_count: s.usage_count,
+                created_at: s.created_at,
+                updated_at: s.updated_at,
+            })
+            .collect(),
+    };
+
+    let count = backup.snippets.len() as u32;
+    let json = crate::backup::to_json_pretty(&backup)?;
+    std::fs::write(&path, json).map_err(|e| format!("export failed: {e}"))?;
+    Ok(count)
+}
+
+/// Parse + validate a backup file, then merge it into the library in a
+/// single transaction. Validation happens entirely before any database
+/// write; any error leaves the database unchanged.
+#[tauri::command]
+pub fn import_snippets(
+    db: State<'_, Db>,
+    path: String,
+) -> CmdResult<crate::backup::ImportSummary> {
+    let json =
+        std::fs::read_to_string(&path).map_err(|e| format!("import failed: {e}"))?;
+    let backup = crate::backup::parse_and_validate(&json)?;
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn).import_backup(&backup).map_err(map_err)
+}

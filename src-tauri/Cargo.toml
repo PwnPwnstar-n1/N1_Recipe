@@ -26,6 +26,7 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 tauri-plugin-clipboard-manager = "2.3.2"
 chrono = "0.4.45"
 tauri-plugin-global-shortcut = "2.3.2"
+tauri-plugin-dialog = "2.7.2"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod commands;
 pub mod db;
 pub mod models;
@@ -17,6 +18,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -82,6 +84,8 @@ pub fn run() {
             commands::apply_dock_settings,
             commands::expand_dock,
             commands::collapse_dock,
+            commands::export_snippets,
+            commands::import_snippets,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SnipDeck");

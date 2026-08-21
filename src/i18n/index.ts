@@ -43,5 +43,12 @@ export function localizeError(err: unknown): string {
   if (msg.startsWith("failed to bind shortcut handler"))
     return t("errors.shortcutRegistrationFailed");
   if (msg.startsWith("invalid dock")) return t("errors.dockInvalid");
+  if (msg.startsWith("export failed")) return t("errors.exportFailed");
+  if (msg.startsWith("import failed")) return t("errors.importFailed");
+  if (msg.startsWith("invalid backup format")) return t("errors.invalidBackupFormat");
+  if (msg.startsWith("unsupported backup version"))
+    return t("errors.unsupportedBackupVersion");
+  if (msg.startsWith("invalid snippet type")) return t("errors.invalidSnippetType");
+  if (msg.startsWith("missing required field")) return t("errors.missingRequiredField");
   return msg;
 }

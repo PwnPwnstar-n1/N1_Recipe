@@ -105,6 +105,20 @@ export function collapseDock(): Promise<void> {
   return call<void>("collapse_dock");
 }
 
+export interface ImportSummary {
+  added: number;
+  skippedDuplicates: number;
+  failed: number;
+}
+
+export function exportSnippets(path: string): Promise<number> {
+  return call<number>("export_snippets", { path });
+}
+
+export function importSnippets(path: string): Promise<ImportSummary> {
+  return call<ImportSummary>("import_snippets", { path });
+}
+
 export function showLauncher(): Promise<void> {
   return call<void>("show_launcher");
 }

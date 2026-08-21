@@ -82,6 +82,9 @@ export default {
     right: "Right",
     alwaysOnTop: "Always On Top",
     autoHide: "Auto Hide",
+    backup: "Backup & Restore",
+    exportData: "Export Data",
+    importData: "Import Data",
   },
   dock: {
     placeholder: "Search snippets...",
@@ -103,6 +106,8 @@ export default {
     deleted: "Deleted",
     saved: "Saved",
     created: "Created",
+    exportCompleted: "Export completed ({count} snippets)",
+    importCompleted: "Import completed — added {added}, skipped duplicates {skipped}",
   },
   errors: {
     titleRequired: "Title is required",
@@ -111,6 +116,12 @@ export default {
     shortcutRegistrationFailed:
       "Shortcut registration failed — it may be in use by another application",
     dockInvalid: "Invalid dock settings",
+    exportFailed: "Export failed",
+    importFailed: "Import failed",
+    invalidBackupFormat: "Invalid backup format",
+    unsupportedBackupVersion: "Unsupported backup version",
+    invalidSnippetType: "Invalid snippet type",
+    missingRequiredField: "Missing required field",
   },
   time: {
     never: "never",
