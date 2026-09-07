@@ -1,7 +1,74 @@
 use tauri::{
-    AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalPosition, Runtime, WebviewUrl,
-    WebviewWindow, WebviewWindowBuilder,
+    AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Runtime,
+    WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
+
+const MAIN_DEFAULT_WIDTH: f64 = 1200.0;
+const MAIN_DEFAULT_HEIGHT: f64 = 800.0;
+const MAIN_MIN_WIDTH: f64 = 960.0;
+const MAIN_MIN_HEIGHT: f64 = 620.0;
+const MIN_VISIBLE_WIDTH: f64 = 80.0;
+const MIN_VISIBLE_HEIGHT: f64 = 40.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Rect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DisplayArea {
+    work: Rect,
+    scale: f64,
+}
+
+fn intersection_size(a: Rect, b: Rect) -> (f64, f64) {
+    (
+        (a.x + a.width).min(b.x + b.width) - a.x.max(b.x),
+        (a.y + a.height).min(b.y + b.height) - a.y.max(b.y),
+    )
+}
+
+fn safe_main_geometry(current: Rect, displays: &[DisplayArea]) -> Option<(Rect, bool)> {
+    let display = displays
+        .iter()
+        .find(|display| {
+            let (width, height) = intersection_size(current, display.work);
+            width >= MIN_VISIBLE_WIDTH && height >= MIN_VISIBLE_HEIGHT
+        })
+        .or_else(|| displays.first())?;
+    let scale = if display.scale.is_finite() && display.scale > 0.0 {
+        display.scale
+    } else {
+        1.0
+    };
+    let valid_numbers = [current.x, current.y, current.width, current.height]
+        .iter()
+        .all(|number| number.is_finite());
+    let (visible_width, visible_height) = intersection_size(current, display.work);
+    let valid = valid_numbers
+        && current.width >= MAIN_MIN_WIDTH * scale
+        && current.height >= MAIN_MIN_HEIGHT * scale
+        && visible_width >= MIN_VISIBLE_WIDTH
+        && visible_height >= MIN_VISIBLE_HEIGHT;
+    if valid {
+        return Some((current, false));
+    }
+
+    let width = (MAIN_DEFAULT_WIDTH * scale).min(display.work.width);
+    let height = (MAIN_DEFAULT_HEIGHT * scale).min(display.work.height);
+    Some((
+        Rect {
+            x: display.work.x + (display.work.width - width) / 2.0,
+            y: display.work.y + (display.work.height - height) / 2.0,
+            width,
+            height,
+        },
+        true,
+    ))
+}
 
 /// Window roles. Every window of SnipDeck belongs to exactly one role; the
 /// role is the window label, so `main` / `launcher` / `dock` stay the single
@@ -105,6 +172,12 @@ pub fn apply_dock_geometry<R: Runtime>(
     dock: &crate::settings::DockSettings,
     expanded: bool,
 ) -> tauri::Result<()> {
+    debug_assert_eq!(window.label(), roles::DOCK);
+    eprintln!(
+        "N1_Recipe dock geometry: target={} state={}",
+        window.label(),
+        if expanded { "expanded" } else { "collapsed" }
+    );
     let monitor = window
         .primary_monitor()
         .ok()
@@ -182,10 +255,77 @@ pub fn position_launcher<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result
 /// preserved unless the window is already off-screen.
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let window = get(app, roles::MAIN).ok_or_else(|| "main window not initialized".to_string())?;
+    repair_main_window(&window)?;
     window.show().map_err(|e| e.to_string())?;
     window.unminimize().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Native safety net used by startup, tray restore and second-instance restore.
+/// It repairs only the main native window and never touches application data.
+pub fn repair_main_window<R: Runtime>(window: &WebviewWindow<R>) -> Result<bool, String> {
+    if window.label() != roles::MAIN {
+        return Err(format!(
+            "refusing main geometry repair for {}",
+            window.label()
+        ));
+    }
+    let position = window.outer_position().map_err(|e| e.to_string())?;
+    let size = window.inner_size().map_err(|e| e.to_string())?;
+    let current = Rect {
+        x: position.x as f64,
+        y: position.y as f64,
+        width: size.width as f64,
+        height: size.height as f64,
+    };
+    let available = window.available_monitors().map_err(|e| e.to_string())?;
+    let mut monitors = Vec::new();
+    if let Some(primary) = window.primary_monitor().map_err(|e| e.to_string())? {
+        monitors.push(primary);
+    }
+    monitors.extend(available);
+    let displays: Vec<DisplayArea> = monitors
+        .into_iter()
+        .map(|monitor| {
+            let work = monitor.work_area();
+            DisplayArea {
+                work: Rect {
+                    x: work.position.x as f64,
+                    y: work.position.y as f64,
+                    width: work.size.width as f64,
+                    height: work.size.height as f64,
+                },
+                scale: monitor.scale_factor(),
+            }
+        })
+        .collect();
+    let Some((geometry, recovered)) = safe_main_geometry(current, &displays) else {
+        return Ok(false);
+    };
+    if recovered {
+        window
+            .set_size(PhysicalSize::new(
+                geometry.width.round() as u32,
+                geometry.height.round() as u32,
+            ))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_position(PhysicalPosition::new(
+                geometry.x.round() as i32,
+                geometry.y.round() as i32,
+            ))
+            .map_err(|e| e.to_string())?;
+    }
+    eprintln!(
+        "N1_Recipe window geometry: version={} label={} raw={:?} final={:?} recovered={}",
+        env!("CARGO_PKG_VERSION"),
+        window.label(),
+        current,
+        geometry,
+        recovered
+    );
+    Ok(recovered)
 }
 
 /// Position + show + focus the launcher. The window is created once at
@@ -224,7 +364,7 @@ pub fn toggle_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Stri
 
 #[cfg(test)]
 mod tests {
-    use super::roles;
+    use super::{roles, safe_main_geometry, DisplayArea, Rect};
 
     /// The window-label contract: frontend routing, capabilities and the
     /// runtime harness all depend on these exact labels.
@@ -233,5 +373,87 @@ mod tests {
         assert_eq!(roles::MAIN, "main");
         assert_eq!(roles::LAUNCHER, "launcher");
         assert_eq!(roles::DOCK, "dock");
+    }
+
+    fn display(scale: f64) -> DisplayArea {
+        DisplayArea {
+            work: Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 1920.0 * scale,
+                height: 1040.0 * scale,
+            },
+            scale,
+        }
+    }
+
+    #[test]
+    fn tiny_dock_sized_main_is_recovered() {
+        let current = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 15.0,
+            height: 37.0,
+        };
+        let (safe, recovered) = safe_main_geometry(current, &[display(1.0)]).unwrap();
+        assert!(recovered);
+        assert_eq!(safe.width, 1200.0);
+        assert_eq!(safe.height, 800.0);
+    }
+
+    #[test]
+    fn offscreen_and_non_finite_main_are_recovered() {
+        for current in [
+            Rect {
+                x: 9000.0,
+                y: 9000.0,
+                width: 1200.0,
+                height: 800.0,
+            },
+            Rect {
+                x: f64::NAN,
+                y: 0.0,
+                width: 1200.0,
+                height: 800.0,
+            },
+        ] {
+            assert!(safe_main_geometry(current, &[display(1.0)]).unwrap().1);
+        }
+    }
+
+    #[test]
+    fn main_minimum_is_scaled_for_dpi() {
+        let current = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 960.0,
+            height: 620.0,
+        };
+        let (safe, recovered) = safe_main_geometry(current, &[display(1.25)]).unwrap();
+        assert!(recovered);
+        assert_eq!(safe.width, 1500.0);
+        assert_eq!(safe.height, 1000.0);
+    }
+
+    #[test]
+    fn dock_geometry_target_is_never_main() {
+        assert_eq!(roles::DOCK, "dock");
+        assert_ne!(roles::DOCK, roles::MAIN);
+        assert_ne!(roles::DOCK, roles::LAUNCHER);
+    }
+
+    #[test]
+    fn configured_main_does_not_inherit_dock_window_attributes() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let main = &config["app"]["windows"][0];
+        assert_eq!(main["label"], "main");
+        assert_eq!(main["transparent"], false);
+        assert_eq!(main["decorations"], true);
+        assert_eq!(main["resizable"], true);
+        assert_eq!(main["skipTaskbar"], false);
+        assert_eq!(main["alwaysOnTop"], false);
+        assert_eq!(main["minWidth"], 960);
+        assert_eq!(main["minHeight"], 620);
     }
 }

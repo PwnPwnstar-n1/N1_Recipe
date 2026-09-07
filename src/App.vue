@@ -26,12 +26,12 @@ import LauncherView from "./components/LauncherView.vue";
 import DockView from "./components/DockView.vue";
 import ScratchView from "./components/ScratchView.vue";
 import {restoreAndTrackWindow} from "./windowGeometry";
+import {resolveWindowRole, type WindowRole} from "./windowRole";
 
 const { t } = useI18n();
 
 // Multi-window foundation: each window renders this app bundle and picks its
 // role from the window label. Only the main window boots the management UI.
-type WindowRole = "main" | "launcher" | "dock";
 const windowRole = ref<WindowRole>("main");
 let stopGeometry:(()=>void)|undefined;
 
@@ -54,10 +54,7 @@ onUnmounted(() => {
 async function detectWindowRole(): Promise<WindowRole> {
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    const label = getCurrentWindow().label;
-    if (label === "launcher") return "launcher";
-    if (label === "dock") return "dock";
-    return "main";
+    return resolveWindowRole(getCurrentWindow().label);
   } catch {
     // plain browser (vite without Tauri) — assume main
     return "main";

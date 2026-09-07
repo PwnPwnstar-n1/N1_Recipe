@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 - 2026-09-08
+
+- Fixed the main window being restored as a tiny transparent Dock-like strip.
+- Kept main, Dock and launcher window roles and geometry state strictly isolated.
+- Added automatic recovery for invalid, undersized, off-screen and DPI-invalid main-window geometry.
+- Preserved the database, snippets, categories, scratch items, recipes and all non-window settings during recovery.
+
 ## 0.2.0 - 2026-09-07
 
 - Renamed the user-facing product to N1_Recipe while retaining the existing bundle identifier and data directory for seamless upgrades.

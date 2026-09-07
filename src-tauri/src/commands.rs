@@ -398,6 +398,7 @@ pub fn apply_dock_settings<R: tauri::Runtime>(
 pub fn expand_dock<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
     let window = crate::windows::get(&app, crate::windows::roles::DOCK)
         .ok_or_else(|| "dock window not initialized".to_string())?;
+    debug_assert_eq!(window.label(), crate::windows::roles::DOCK);
     let settings = settings::load(&settings::app_settings_path(&app)?)?;
     // idempotent: already expanded -> nothing to do (no redundant commands,
     // no state events to race later transitions)
@@ -416,6 +417,7 @@ pub fn expand_dock<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
 pub fn collapse_dock<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
     let window = crate::windows::get(&app, crate::windows::roles::DOCK)
         .ok_or_else(|| "dock window not initialized".to_string())?;
+    debug_assert_eq!(window.label(), crate::windows::roles::DOCK);
     let settings = settings::load(&settings::app_settings_path(&app)?)?;
     // idempotent: already collapsed -> nothing to do
     if crate::windows::dock_matches_width(&window, settings.dock.collapsed_width as f64)

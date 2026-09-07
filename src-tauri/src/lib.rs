@@ -48,11 +48,26 @@ pub fn run() {
 
             let settings =
                 settings::load(&settings::app_settings_path(app.handle())?).unwrap_or_default();
+            eprintln!(
+                "N1_Recipe startup: version={} mode={}",
+                env!("CARGO_PKG_VERSION"),
+                if tray::started_via_autostart() {
+                    "autostart"
+                } else {
+                    "manual"
+                }
+            );
 
             // Windows are created ONCE and only show/hide at runtime (never
             // destroyed — see src/windows.rs for the wry deadlock rationale).
             windows::ensure_hidden_launcher(app.handle())?;
             windows::ensure_hidden_dock(app.handle())?;
+
+            // Repair a poisoned/off-screen native main geometry before any
+            // startup visibility decision. This does not touch settings or DB.
+            if let Some(window) = windows::get(app.handle(), windows::roles::MAIN) {
+                let _ = windows::repair_main_window(&window);
+            }
 
             // Apply persisted dock geometry/visibility.
             if settings.dock.enabled {
