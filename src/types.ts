@@ -33,6 +33,9 @@ export interface Snippet {
   lastUsedAt: number | null;
   createdAt: number;
   updatedAt: number;
+  kind: "TEXT" | "COMMAND_GROUP";
+  commands: string[];
+  dockPinned?:boolean;stableId?:string;sourcePackId?:string;sourcePackVersion?:string;
 }
 
 export interface SnippetInput {
@@ -43,6 +46,8 @@ export interface SnippetInput {
   language: string;
   tags: string[];
   aliases: string[];
+  kind: "TEXT" | "COMMAND_GROUP";
+  commands: string[];
 }
 
 export interface CategoryInfo {
@@ -55,4 +60,5 @@ export interface CopyResult {
   snippet: Snippet;
 }
 
-export type ViewName = "all" | "favorites" | "recent" | "most_used" | "category";
+export interface ScratchItem { id:number; content:string; createdAt:number; updatedAt:number }
+export type ViewName = "all" | "favorites" | "recent" | "most_used" | "dock_pinned" | "category" | "scratch";

@@ -1,9 +1,9 @@
-use crate::models::{CategoryInfo, ListView, Snippet, SnippetInput, SnippetType};
+use crate::models::{CategoryInfo, ListView, ScratchItem, Snippet, SnippetInput, SnippetType};
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row, Transaction};
 
 /// Column list shared by every snippet query (aliased table `s`).
 const SNIPPET_COLS: &str = "s.id, s.title, s.content, s.type, s.category, s.language, \
-     s.favorite, s.usage_count, s.last_used_at, s.created_at, s.updated_at";
+     s.favorite, s.usage_count, s.last_used_at, s.created_at, s.updated_at, s.kind, s.commands, s.dock_pinned, s.stable_id, s.source_pack_id, s.source_pack_version";
 
 /// Sub-select returning tags joined by char(31) (unit separator, invisible in practice).
 const TAG_SUB: &str = "(SELECT group_concat(t.name, char(31)) FROM snippet_tags st \
@@ -24,11 +24,7 @@ impl<'a> Repo<'a> {
         Self { conn }
     }
 
-    fn query_snippets(
-        &self,
-        sql: &str,
-        params: Vec<String>,
-    ) -> rusqlite::Result<Vec<Snippet>> {
+    fn query_snippets(&self, sql: &str, params: Vec<String>) -> rusqlite::Result<Vec<Snippet>> {
         let mut stmt = self.conn.prepare(sql)?;
         let rows = stmt.query_map(params_from_iter(params.iter()), map_snippet)?;
         rows.collect()
@@ -38,9 +34,7 @@ impl<'a> Repo<'a> {
     pub fn list(&self, view: &ListView) -> rusqlite::Result<Vec<Snippet>> {
         let (where_sql, order_sql, limit_sql) = match view {
             ListView::All => ("", "ORDER BY s.favorite DESC, s.updated_at DESC", ""),
-            ListView::Favorites => {
-                ("WHERE s.favorite = 1", "ORDER BY s.updated_at DESC", "")
-            }
+            ListView::Favorites => ("WHERE s.favorite = 1", "ORDER BY s.updated_at DESC", ""),
             ListView::Recent => (
                 "WHERE s.last_used_at IS NOT NULL",
                 "ORDER BY s.last_used_at DESC",
@@ -51,6 +45,7 @@ impl<'a> Repo<'a> {
                 "ORDER BY s.usage_count DESC, s.updated_at DESC",
                 "LIMIT 50",
             ),
+            ListView::DockPinned => ("WHERE s.dock_pinned = 1", "ORDER BY s.updated_at DESC", ""),
             ListView::Category(_) => (
                 "WHERE s.category = ?1",
                 "ORDER BY s.favorite DESC, s.updated_at DESC",
@@ -76,21 +71,18 @@ impl<'a> Repo<'a> {
     /// matching when substring search returns nothing (so `rtl` finds
     /// `ret2libc`).
     pub fn search(&self, query: &str) -> rusqlite::Result<Vec<Snippet>> {
-        let terms: Vec<String> = query
-            .split_whitespace()
-            .map(like_pattern)
-            .collect();
+        let terms: Vec<String> = query.split_whitespace().map(like_pattern).collect();
         if terms.is_empty() {
             return Ok(Vec::new());
         }
 
         let result = self.search_with_terms(&terms)?;
         if result.is_empty() {
-            let subseq: Vec<String> = query
-                .split_whitespace()
-                .map(subsequence_pattern)
-                .collect();
-            if subseq.iter().any(|p| p.chars().filter(|c| *c != '%').count() >= 2) {
+            let subseq: Vec<String> = query.split_whitespace().map(subsequence_pattern).collect();
+            if subseq
+                .iter()
+                .any(|p| p.chars().filter(|c| *c != '%').count() >= 2)
+            {
                 return self.search_with_terms(&subseq);
             }
         }
@@ -160,9 +152,15 @@ impl<'a> Repo<'a> {
         updated_at: i64,
     ) -> rusqlite::Result<Snippet> {
         let tx = self.conn.unchecked_transaction()?;
+        if !input.category.trim().is_empty() {
+            tx.execute(
+                "INSERT OR IGNORE INTO categories(name,created_at) VALUES (?1,?2)",
+                params![input.category.trim(), created_at],
+            )?;
+        }
         tx.execute(
-            "INSERT INTO snippets (title, content, type, category, language, favorite, usage_count, last_used_at, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO snippets (title, content, type, category, language, favorite, usage_count, last_used_at, created_at, updated_at, kind, commands) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 input.title.trim(),
                 input.content,
@@ -173,7 +171,9 @@ impl<'a> Repo<'a> {
                 usage_count,
                 last_used_at,
                 created_at,
-                updated_at
+                updated_at,
+                input.kind,
+                serde_json::to_string(&input.commands).unwrap_or_else(|_| "[]".into())
             ],
         )?;
         let id = tx.last_insert_rowid();
@@ -217,6 +217,8 @@ impl<'a> Repo<'a> {
                 language: snippet.language.clone(),
                 tags: snippet.tags.clone(),
                 aliases: snippet.aliases.clone(),
+                kind: snippet.kind.clone(),
+                commands: snippet.commands.clone(),
             };
             tx.execute(
                 "INSERT INTO snippets (title, content, type, category, language, favorite, usage_count, last_used_at, created_at, updated_at) \
@@ -252,8 +254,14 @@ impl<'a> Repo<'a> {
     pub fn update(&self, id: i64, input: &SnippetInput) -> rusqlite::Result<Snippet> {
         let now = crate::models::now_ms();
         let tx = self.conn.unchecked_transaction()?;
+        if !input.category.trim().is_empty() {
+            tx.execute(
+                "INSERT OR IGNORE INTO categories(name,created_at) VALUES (?1,?2)",
+                params![input.category.trim(), now],
+            )?;
+        }
         let changed = tx.execute(
-            "UPDATE snippets SET title = ?1, content = ?2, type = ?3, category = ?4, language = ?5, updated_at = ?6 WHERE id = ?7",
+            "UPDATE snippets SET title = ?1, content = ?2, type = ?3, category = ?4, language = ?5, updated_at = ?6, kind = ?8, commands = ?9 WHERE id = ?7",
             params![
                 input.title.trim(),
                 input.content,
@@ -261,14 +269,19 @@ impl<'a> Repo<'a> {
                 input.category.trim(),
                 input.language.trim(),
                 now,
-                id
+                id,
+                input.kind,
+                serde_json::to_string(&input.commands).unwrap_or_else(|_| "[]".into())
             ],
         )?;
         if changed == 0 {
             tx.rollback()?;
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
-        tx.execute("DELETE FROM snippet_tags WHERE snippet_id = ?1", params![id])?;
+        tx.execute(
+            "DELETE FROM snippet_tags WHERE snippet_id = ?1",
+            params![id],
+        )?;
         tx.execute("DELETE FROM aliases WHERE snippet_id = ?1", params![id])?;
         sync_tags(&tx, id, &input.tags)?;
         sync_aliases(&tx, id, &input.aliases)?;
@@ -300,6 +313,13 @@ impl<'a> Repo<'a> {
         }
         self.get(id)
     }
+    pub fn toggle_dock_pin(&self, id: i64) -> rusqlite::Result<Snippet> {
+        self.conn.execute(
+            "UPDATE snippets SET dock_pinned=CASE dock_pinned WHEN 1 THEN 0 ELSE 1 END WHERE id=?1",
+            params![id],
+        )?;
+        self.get(id)
+    }
 
     /// usage_count + 1 and refresh last_used_at — called on every copy.
     pub fn record_usage(&self, id: i64) -> rusqlite::Result<()> {
@@ -315,8 +335,8 @@ impl<'a> Repo<'a> {
 
     pub fn categories(&self) -> rusqlite::Result<Vec<CategoryInfo>> {
         let mut stmt = self.conn.prepare(
-            "SELECT category, COUNT(*) AS c FROM snippets WHERE category != '' \
-             GROUP BY category ORDER BY category COLLATE NOCASE",
+            "SELECT c.name, COUNT(s.id) FROM categories c LEFT JOIN snippets s ON s.category = c.name COLLATE NOCASE \
+             GROUP BY c.id, c.name ORDER BY c.name COLLATE NOCASE",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(CategoryInfo {
@@ -325,6 +345,87 @@ impl<'a> Repo<'a> {
             })
         })?;
         rows.collect()
+    }
+
+    pub fn create_category(&self, name: &str) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "INSERT INTO categories(name, created_at) VALUES (?1, ?2)",
+            params![name.trim(), crate::models::now_ms()],
+        )?;
+        Ok(())
+    }
+
+    pub fn rename_category(&self, old: &str, new: &str) -> rusqlite::Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "UPDATE categories SET name=?1 WHERE name=?2 COLLATE NOCASE",
+            params![new.trim(), old],
+        )?;
+        tx.execute(
+            "UPDATE snippets SET category=?1 WHERE category=?2 COLLATE NOCASE",
+            params![new.trim(), old],
+        )?;
+        tx.commit()
+    }
+
+    pub fn delete_category(&self, name: &str) -> rusqlite::Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "UPDATE snippets SET category='' WHERE category=?1 COLLATE NOCASE",
+            params![name],
+        )?;
+        tx.execute(
+            "DELETE FROM categories WHERE name=?1 COLLATE NOCASE",
+            params![name],
+        )?;
+        tx.commit()
+    }
+
+    pub fn scratch_list(&self) -> rusqlite::Result<Vec<ScratchItem>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,content,created_at,updated_at FROM scratch_items ORDER BY updated_at DESC",
+        )?;
+        let items = stmt
+            .query_map([], |r| {
+                Ok(ScratchItem {
+                    id: r.get(0)?,
+                    content: r.get(1)?,
+                    created_at: r.get(2)?,
+                    updated_at: r.get(3)?,
+                })
+            })?
+            .collect();
+        items
+    }
+    pub fn scratch_create(&self, content: &str) -> rusqlite::Result<ScratchItem> {
+        let now = crate::models::now_ms();
+        self.conn.execute(
+            "INSERT INTO scratch_items(content,created_at,updated_at) VALUES (?1,?2,?2)",
+            params![content, now],
+        )?;
+        let id = self.conn.last_insert_rowid();
+        Ok(ScratchItem {
+            id,
+            content: content.into(),
+            created_at: now,
+            updated_at: now,
+        })
+    }
+    pub fn scratch_update(&self, id: i64, content: &str) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "UPDATE scratch_items SET content=?1,updated_at=?2 WHERE id=?3",
+            params![content, crate::models::now_ms(), id],
+        )?;
+        Ok(())
+    }
+    pub fn scratch_delete(&self, id: i64) -> rusqlite::Result<()> {
+        self.conn
+            .execute("DELETE FROM scratch_items WHERE id=?1", params![id])?;
+        Ok(())
+    }
+    pub fn scratch_clear(&self) -> rusqlite::Result<()> {
+        self.conn.execute("DELETE FROM scratch_items", [])?;
+        Ok(())
     }
 
     /// Remove tags that no snippet references anymore.
@@ -378,8 +479,8 @@ pub fn normalize_list(items: &[String]) -> Vec<String> {
 }
 
 fn map_snippet(row: &Row) -> rusqlite::Result<Snippet> {
-    let tags: Option<String> = row.get(11)?;
-    let aliases: Option<String> = row.get(12)?;
+    let tags: Option<String> = row.get(17)?;
+    let aliases: Option<String> = row.get(18)?;
     Ok(Snippet {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -394,6 +495,12 @@ fn map_snippet(row: &Row) -> rusqlite::Result<Snippet> {
         last_used_at: row.get(8)?,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
+        kind: row.get(11)?,
+        commands: serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default(),
+        dock_pinned: row.get::<_, i64>(13)? != 0,
+        stable_id: row.get(14)?,
+        source_pack_id: row.get(15)?,
+        source_pack_version: row.get(16)?,
     })
 }
 
@@ -444,6 +551,8 @@ mod tests {
             language: String::new(),
             tags: vec![],
             aliases: vec![],
+            kind: "TEXT".into(),
+            commands: vec![],
         }
     }
 
@@ -456,6 +565,8 @@ mod tests {
             language: "python".into(),
             tags: vec!["pwn".into(), "pwntools".into()],
             aliases: vec!["rtl".into(), "ret2libc".into()],
+            kind: "TEXT".into(),
+            commands: vec![],
         }
     }
 
@@ -544,7 +655,11 @@ mod tests {
         let conn = db::open_in_memory(false).unwrap();
         let repo = test_repo(&conn);
         repo.insert(&full_input()).unwrap();
-        let mut other = input("curl API template", "curl -X POST https://api.example.com", "Dev/HTTP");
+        let mut other = input(
+            "curl API template",
+            "curl -X POST https://api.example.com",
+            "Dev/HTTP",
+        );
         other.tags = vec!["http".into()];
         other.aliases = vec!["curl".into()];
         repo.insert(&other).unwrap();
@@ -675,6 +790,17 @@ mod tests {
     }
 
     #[test]
+    fn long_library_of_35_snippets_remains_complete() {
+        let conn = db::open_in_memory(false).unwrap();
+        let repo = test_repo(&conn);
+        for i in 0..35 {
+            repo.insert(&input(&format!("item {i}"), &"x".repeat(500), "Load test"))
+                .unwrap();
+        }
+        assert_eq!(repo.list(&ListView::All).unwrap().len(), 35);
+    }
+
+    #[test]
     fn import_backup_preserves_metadata_and_assigns_new_ids() {
         use crate::backup::{BackupFile, BackupSnippet, CURRENT_VERSION, FORMAT};
         let conn = db::open_in_memory(false).unwrap();
@@ -696,6 +822,8 @@ mod tests {
                 usage_count: 7,
                 created_at: 100,
                 updated_at: 200,
+                kind: "TEXT".into(),
+                commands: vec![],
             }],
         };
 
@@ -750,6 +878,8 @@ mod tests {
                     usage_count: 0,
                     created_at: 1,
                     updated_at: 1,
+                    kind: "TEXT".into(),
+                    commands: vec![],
                 },
                 BackupSnippet {
                     title: "b".into(),
@@ -763,6 +893,8 @@ mod tests {
                     usage_count: 0,
                     created_at: 2,
                     updated_at: 2,
+                    kind: "TEXT".into(),
+                    commands: vec![],
                 },
             ],
         };

@@ -86,7 +86,7 @@ export default {
     exportData: "导出数据",
     importData: "导入数据",
     startup: "启动",
-    launchOnBoot: "Windows 启动时自动运行 SnipDeck",
+    launchOnBoot: "Windows 启动时自动运行 N1_Recipe",
     startHidden: "开机启动时静默运行（仅托盘）",
   },
   dock: {
@@ -97,7 +97,7 @@ export default {
     copied: "已复制",
   },
   launcher: {
-    title: "SnipDeck 启动器",
+    title: "N1_Recipe 启动器",
     prototype: "启动器原型 — 完整启动器将在 Phase 3 实现。",
     hide: "隐藏（原型）",
     placeholder: "搜索 Snippet...",

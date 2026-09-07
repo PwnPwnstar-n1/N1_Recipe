@@ -1,6 +1,6 @@
-# SnipDeck
+# N1_Recipe
 
-Local-first Snippet / Prompt / Payload / Template Quick Launcher.
+Local-first recipe, prompt, command-group and template launcher.
 
 Windows-first, local-first desktop tool for searching, finding and copying
 frequently used text: AI prompts, security payloads, EXP templates, shell
@@ -16,6 +16,19 @@ commands, curl / HTTP templates and more. All data stays on your machine.
 - zh-CN / en-US
 - JSON Backup / Restore (Settings → Data)
 - System tray with close-to-tray and Windows startup support
+- User-created categories with safe rename/delete (items move to Uncategorized)
+- Scratch area for persistent temporary notes and pasted text
+- Ordered command-group snippets with per-command and copy-all actions
+- Unicode template variables such as `{{文章路径}}` and `{{项目 名称}}`
+- Light, dark and system themes plus four readable font sizes
+- Resizable quick launcher with per-window geometry restoration
+
+## v0.1.1 data compatibility
+
+The existing `snipdeck.db` in the unchanged `com.snipdeck.app` data directory is upgraded in place. Existing snippets remain
+ordinary text snippets; their titles, content, categories and usage metadata
+are retained. Categories are promoted to managed category records. No database
+or user file is deleted or recreated.
 
 ## Default shortcut
 
@@ -35,11 +48,11 @@ opens / closes the Quick Launcher.
 
 ## Quitting
 
-The Main Window's **X** hides SnipDeck to the tray (the launcher, dock and
+The Main Window's **X** hides N1_Recipe to the tray (the launcher, dock and
 global shortcut keep working). To actually exit:
 
 ```
-System Tray → Quit SnipDeck
+System Tray → Quit N1_Recipe
 ```
 
 ## Backup

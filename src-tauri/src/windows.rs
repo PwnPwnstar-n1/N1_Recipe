@@ -1,4 +1,7 @@
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalPosition, Runtime, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder,
+};
 
 /// Window roles. Every window of SnipDeck belongs to exactly one role; the
 /// role is the window label, so `main` / `launcher` / `dock` stay the single
@@ -17,7 +20,7 @@ pub mod roles {
 /// Launcher window geometry. The initial height is small; the frontend
 /// adjusts it to the result count.
 fn launcher_config() -> (f64, f64) {
-    (680.0, 96.0)
+    (720.0, 520.0)
 }
 
 /// Get a window by role.
@@ -34,10 +37,12 @@ pub fn get<R: Runtime>(app: &AppHandle<R>, role: &str) -> Option<WebviewWindow<R
 pub fn create_launcher<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<WebviewWindow<R>> {
     let (width, height) = launcher_config();
     WebviewWindowBuilder::new(app, roles::LAUNCHER, WebviewUrl::App("index.html".into()))
-        .title("SnipDeck")
+        .title("N1_Recipe")
         .inner_size(width, height)
-        .resizable(false)
-        .decorations(false)
+        .min_inner_size(420.0, 260.0)
+        .max_inner_size(1400.0, 1000.0)
+        .resizable(true)
+        .decorations(true)
         .always_on_top(true)
         .skip_taskbar(true)
         .center()
@@ -58,7 +63,7 @@ pub fn ensure_hidden_launcher<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(
 /// NEVER destroyed (same wry deadlock constraint as the launcher).
 pub fn create_dock<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<WebviewWindow<R>> {
     WebviewWindowBuilder::new(app, roles::DOCK, WebviewUrl::App("index.html".into()))
-        .title("SnipDeck")
+        .title("N1_Recipe")
         .inner_size(360.0, 600.0)
         .resizable(false)
         .decorations(false)
@@ -137,8 +142,7 @@ pub fn apply_dock_settings<R: Runtime>(
     app: &AppHandle<R>,
     dock: &crate::settings::DockSettings,
 ) -> Result<(), String> {
-    let window = get(app, roles::DOCK)
-        .ok_or_else(|| "dock window not initialized".to_string())?;
+    let window = get(app, roles::DOCK).ok_or_else(|| "dock window not initialized".to_string())?;
     window
         .set_always_on_top(dock.always_on_top)
         .map_err(|e| e.to_string())?;
@@ -177,8 +181,7 @@ pub fn position_launcher<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result
 /// moves/resizes the window, so the user's chosen monitor/position is
 /// preserved unless the window is already off-screen.
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let window = get(app, roles::MAIN)
-        .ok_or_else(|| "main window not initialized".to_string())?;
+    let window = get(app, roles::MAIN).ok_or_else(|| "main window not initialized".to_string())?;
     window.show().map_err(|e| e.to_string())?;
     window.unminimize().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
@@ -188,17 +191,21 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 /// Position + show + focus the launcher. The window is created once at
 /// startup and NEVER destroyed at runtime.
 pub fn show_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let window = get(app, roles::LAUNCHER)
-        .ok_or_else(|| "launcher window not initialized".to_string())?;
-    position_launcher(&window).map_err(|e| e.to_string())?;
+    let window =
+        get(app, roles::LAUNCHER).ok_or_else(|| "launcher window not initialized".to_string())?;
+    // Preserve the user's adjusted size and position for the lifetime of the
+    // app. Only recover to a visible monitor when it is actually off-screen.
+    if window.current_monitor().ok().flatten().is_none() {
+        position_launcher(&window).map_err(|e| e.to_string())?;
+    }
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 pub fn hide_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let window = get(app, roles::LAUNCHER)
-        .ok_or_else(|| "launcher window not initialized".to_string())?;
+    let window =
+        get(app, roles::LAUNCHER).ok_or_else(|| "launcher window not initialized".to_string())?;
     window.hide().map_err(|e| e.to_string())?;
     Ok(())
 }

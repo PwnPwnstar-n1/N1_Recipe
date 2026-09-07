@@ -1,18 +1,11 @@
 :root {
-  --bg: #1e1e1e;
-  --bg-panel: #252526;
-  --bg-hover: #2a2d2e;
-  --bg-active: #094771;
-  --border: #333333;
-  --text: #cccccc;
-  --text-dim: #9d9d9d;
-  --text-faint: #6e6e6e;
-  --text-bright: #ffffff;
-  --accent: #4f9cf9;
-  --danger: #f14c4c;
+  --font-size-caption:11px;--font-size-small:12px;--font-size-body:14px;--font-size-control:14px;--font-size-title:17px;--font-size-heading:20px;--font-size-code:13.5px;--font-base:var(--font-size-body);--font-sm:var(--font-size-small);--font-lg:var(--font-size-title);--line:1.55;--radius:8px;
+  --bg:#f7f5f2;--bg-panel:#fffdf9;--surface:#fffdf9;--bg-hover:#f0ece7;--hover:#f0ece7;--bg-active:#e9e2ef;--border:#ddd7d1;--text:#28252c;--text-dim:#756f79;--text-faint:#98909a;--text-bright:#211e24;--accent:#7c6f91;--danger:#a64f57;--success:#5f806c;--shadow:0 8px 28px rgba(55,43,60,.10);--control-height:34px;--duration:150ms;
   --star: #e2b93d;
   --mono: Consolas, "Cascadia Mono", "JetBrains Mono", "Courier New", monospace;
 }
+[data-theme="dark"]{--bg:#19181b;--bg-panel:#222126;--surface:#2a282f;--bg-hover:#302e35;--hover:#302e35;--bg-active:#302a38;--border:#39353e;--text:#f1ece7;--text-dim:#aaa2ad;--text-faint:#817984;--text-bright:#fffaf5;--accent:#b5a3c6;--danger:#d87980;--success:#86a991;--shadow:0 10px 30px rgba(0,0,0,.24)}
+[data-font="small"]{--font-size-caption:10px;--font-size-small:11px;--font-size-body:13px;--font-size-control:13px;--font-size-title:16px;--font-size-heading:19px;--font-size-code:13px}[data-font="large"]{--font-size-caption:11px;--font-size-small:13px;--font-size-body:15px;--font-size-control:15px;--font-size-title:18px;--font-size-heading:21px;--font-size-code:14.5px}[data-font="xlarge"]{--font-size-caption:12px;--font-size-small:13px;--font-size-body:16px;--font-size-control:16px;--font-size-title:19px;--font-size-heading:22px;--font-size-code:15px}
 
 * {
   box-sizing: border-box;
@@ -26,12 +19,13 @@ body,
 }
 
 body {
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-  font-size: 13px;
+  font-family:"Segoe UI","Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif;
+  font-size: var(--font-base);line-height:var(--line);
   color: var(--text);
   background: var(--bg);
   overflow: hidden;
 }
+button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button:disabled{opacity:.48;cursor:not-allowed}
 
 ::-webkit-scrollbar {
   width: 10px;
@@ -58,10 +52,11 @@ body {
   flex-shrink: 0;
   padding: 1px 7px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
   letter-spacing: 0.4px;
 }
+.badge[class*="type-"]{background:var(--bg-hover);color:var(--text-dim);border:1px solid var(--border);text-transform:capitalize}
 
 .type-prompt {
   background: #3a1d4e;

@@ -12,8 +12,13 @@ import {
   updateStartupSettings,
 } from "../store";
 import type { AppLocale } from "../i18n";
+import RecipePackPanel from"./RecipePackPanel.vue";
+import {applyAppearance,type FontSize,type Theme} from "../appearance";
 
 const { t } = useI18n();
+const theme=ref<Theme>((localStorage.getItem("snipdeck.theme") as Theme)||"system");
+const fontSize=ref<FontSize>((localStorage.getItem("snipdeck.font") as FontSize)||"standard");
+function changeAppearance(){applyAppearance(theme.value,fontSize.value)}
 
 const options: { value: AppLocale; label: string }[] = [
   { value: "zh-CN", label: "简体中文" },
@@ -174,8 +179,8 @@ const backupIsError = ref(false);
 
 async function onExport(): Promise<void> {
   const path = await save({
-    filters: [{ name: "SnipDeck Backup", extensions: ["json"] }],
-    defaultPath: "snipdeck-backup.json",
+    filters: [{ name: "N1_Recipe Backup", extensions: ["json"] }],
+    defaultPath: "n1-recipe-backup.json",
   });
   if (!path) return;
   try {
@@ -190,7 +195,7 @@ async function onExport(): Promise<void> {
 
 async function onImport(): Promise<void> {
   const selected = await open({
-    filters: [{ name: "SnipDeck Backup", extensions: ["json"] }],
+    filters: [{ name: "N1_Recipe Backup", extensions: ["json"] }],
     multiple: false,
   });
   if (!selected) return;
@@ -213,6 +218,7 @@ async function onImport(): Promise<void> {
 <template>
   <div class="settings">
     <h2 class="title">{{ t("settings.title") }}</h2>
+    <div class="group"><label class="label">外观</label><div class="appearance-row"><select v-model="theme" class="select" @change="changeAppearance"><option value="system">跟随系统</option><option value="light">亮色</option><option value="dark">暗色</option></select><select v-model="fontSize" class="select" @change="changeAppearance"><option value="small">小</option><option value="standard">标准</option><option value="large">大</option><option value="xlarge">特大</option></select></div><p class="hint">主题和字号会应用到主窗口、编辑器与快捷窗口。</p></div>
 
     <div class="group">
       <label class="label">{{ t("settings.language") }}</label>
@@ -228,6 +234,9 @@ async function onImport(): Promise<void> {
       <p class="hint">{{ t("settings.languageHint") }}</p>
     </div>
 
+    <div class="group">
+      <label class="label">N1 配方包</label><RecipePackPanel/>
+    </div>
     <div class="group">
       <label class="label">{{ t("settings.quickLauncher") }}</label>
       <label class="checkbox">
@@ -341,7 +350,11 @@ async function onImport(): Promise<void> {
 
 <style scoped>
 .settings {
-  padding: 16px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 16px 40px;
   display: flex;
   flex-direction: column;
   gap: 16px;

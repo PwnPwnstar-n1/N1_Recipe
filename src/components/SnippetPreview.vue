@@ -9,6 +9,8 @@ import {
   selected,
   toggleFavorite,
 } from "../store";
+import * as api from "../api";
+import TemplateVariableDialog from"./TemplateVariableDialog.vue";
 
 const { t } = useI18n();
 const s = computed(() => selected());
@@ -50,6 +52,9 @@ function onDelete(): void {
 function onEdit(): void {
   if (s.value) openEdit(s.value.id);
 }
+const commandDialog=ref<{text:string;variables:string[]}|null>(null);async function copyCommand(text:string){const variables=await api.listTextVariables(text);if(variables.length){commandDialog.value={text,variables};return}await api.copyTemplateText(text,{},s.value?.id);copied.value=true}async function confirmCommand(values:Record<string,string>){if(!commandDialog.value)return;await api.copyTemplateText(commandDialog.value.text,values,s.value?.id);commandDialog.value=null;copied.value=true}
+async function copyAllCommands(){if(!s.value)return;await copyCommand(s.value.commands.join("\n"))}
+async function togglePin(){if(s.value){await api.toggleDockPin(s.value.id);await import("../store").then(m=>m.refresh())}}
 </script>
 
 <template>
@@ -101,10 +106,11 @@ function onEdit(): void {
       </div>
     </div>
 
-    <pre class="content">{{ s.content }}</pre>
+    <div v-if="s.kind==='COMMAND_GROUP'" class="commands"><div v-for="(command,i) in s.commands" :key="i" class="command"><span>{{i+1}}</span><code>{{command}}</code><button @click="copyCommand(command)">复制</button></div></div><pre v-else class="content">{{ s.content }}</pre>
 
     <div class="actions">
-      <button class="btn primary" @click="onCopy">
+      <button class="btn" @click="togglePin">{{s.dockPinned?'取消固定':'固定到 Dock'}}</button>
+      <button class="btn primary" @click="s.kind==='COMMAND_GROUP'?copyAllCommands():onCopy()">
         {{ copied ? t("preview.copied") : t("preview.copy") }}
       </button>
       <button class="btn" @click="onEdit">{{ t("preview.edit") }}</button>
@@ -113,6 +119,7 @@ function onEdit(): void {
       </button>
     </div>
   </div>
+  <TemplateVariableDialog v-if="commandDialog&&s" :title="s.title" :variables="commandDialog.variables" @confirm="confirmCommand" @cancel="commandDialog=null"/>
 </template>
 
 <style scoped>
@@ -121,7 +128,7 @@ function onEdit(): void {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 100%;
+  height:100%;min-height:0;overflow:hidden;
 }
 
 .head {
@@ -202,12 +209,14 @@ function onEdit(): void {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: text;
+  overflow:auto;min-height:0;
 }
 
 .actions {
   display: flex;
   gap: 8px;
 }
+.commands{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px}.command{display:flex;gap:8px;align-items:flex-start;padding:10px;background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius)}.command>span{color:var(--text-faint)}.command code{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--mono)}.command button{border:1px solid var(--border);background:transparent;color:var(--accent);border-radius:4px;padding:4px 8px;cursor:pointer}
 
 .btn {
   padding: 6px 14px;

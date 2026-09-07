@@ -14,6 +14,8 @@ const form = reactive({
   language: "",
   tags: "",
   aliases: "",
+  kind: "TEXT" as "TEXT"|"COMMAND_GROUP",
+  commands: [""] as string[],
 });
 
 const error = ref("");
@@ -32,6 +34,7 @@ watch(
         form.language = src.language;
         form.tags = src.tags.join(", ");
         form.aliases = src.aliases.join(", ");
+        form.kind=src.kind; form.commands=src.commands.length?[...src.commands]:[""];
         return;
       }
     }
@@ -42,6 +45,7 @@ watch(
     form.language = "";
     form.tags = "";
     form.aliases = "";
+    form.kind="TEXT";form.commands=[""];
   },
   { immediate: true },
 );
@@ -68,8 +72,12 @@ async function onSave(): Promise<void> {
     language: form.language.trim(),
     tags: splitCsv(form.tags),
     aliases: splitCsv(form.aliases),
+    kind: form.kind,
+    commands: form.kind==="COMMAND_GROUP"?form.commands.map(x=>x.trim()).filter(Boolean):[],
   });
 }
+function importLines(){const lines=form.content.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(lines.length){form.commands=lines;form.content=""}}
+function move(index:number,delta:number){const next=index+delta;if(next<0||next>=form.commands.length)return;[form.commands[index],form.commands[next]]=[form.commands[next],form.commands[index]]}
 
 function onKeydown(e: KeyboardEvent): void {
   if (e.ctrlKey && e.key.toLowerCase() === "s") {
@@ -87,6 +95,7 @@ function onKeydown(e: KeyboardEvent): void {
       <span class="label">{{ t("editor.title") }}</span>
       <input v-model="form.title" type="text" :placeholder="t('editor.titlePlaceholder')" />
     </label>
+    <label class="field"><span class="label">内容模式</span><select v-model="form.kind"><option value="TEXT">普通文本</option><option value="COMMAND_GROUP">命令组</option></select></label>
 
     <div class="row">
       <label class="field">
@@ -125,7 +134,7 @@ function onKeydown(e: KeyboardEvent): void {
       </label>
     </div>
 
-    <label class="field grow">
+    <label v-if="form.kind==='TEXT'" class="field grow">
       <span class="label">{{ t("editor.content") }}</span>
       <textarea
         v-model="form.content"
@@ -133,6 +142,7 @@ function onKeydown(e: KeyboardEvent): void {
         :placeholder="t('editor.contentPlaceholder')"
       ></textarea>
     </label>
+    <div v-else class="command-editor"><div class="command-tools"><span class="label">命令（按顺序）</span><button class="btn" @click="form.commands.push('')">＋ 新增</button></div><div v-for="(_,i) in form.commands" :key="i" class="command-row"><textarea v-model="form.commands[i]" spellcheck="false" placeholder="输入一条命令"></textarea><div><button class="mini" :disabled="i===0" @click="move(i,-1)">↑</button><button class="mini" :disabled="i===form.commands.length-1" @click="move(i,1)">↓</button><button class="mini danger" @click="form.commands.splice(i,1)">×</button></div></div><label class="field"><span class="label">多行快速导入</span><textarea v-model="form.content" class="import" placeholder="每个非空行导入为一条命令"></textarea></label><button class="btn" :disabled="!form.content.trim()" @click="importLines">导入非空行</button></div>
 
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -150,7 +160,9 @@ function onKeydown(e: KeyboardEvent): void {
   flex-direction: column;
   gap: 12px;
   height: 100%;
+  overflow-y:auto;min-height:0;
 }
+.command-editor{display:flex;flex-direction:column;gap:8px}.command-tools,.command-row{display:flex;gap:8px;align-items:center}.command-tools .label{margin-right:auto}.command-row textarea{min-height:58px;resize:vertical}.command-row>div{display:flex;flex-direction:column}.mini{border:0;background:transparent;color:var(--text);cursor:pointer}.mini.danger{color:var(--danger)}textarea.import{min-height:80px}
 
 .head {
   margin: 0;

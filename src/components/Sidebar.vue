@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
-import { openCreate, setView, store, toggleSettings } from "../store";
+import { useI18n } from "vue-i18n";import{ref}from"vue";import InputDialog from"./InputDialog.vue";import ConfirmDialog from"./ConfirmDialog.vue";
+import { createCategory, deleteCategory, openCreate, renameCategory, setView, store, toggleSettings } from "../store";
 import type { ViewName } from "../types";
 
 const { t } = useI18n();
@@ -11,11 +11,12 @@ const views: { key: ViewName; labelKey: string; icon: string }[] = [
   { key: "recent", labelKey: "sidebar.recent", icon: "◷" },
   { key: "most_used", labelKey: "sidebar.mostUsed", icon: "▲" },
 ];
+const input=ref<{mode:"add"|"edit";name:string}|null>(null),remove=ref<{name:string;count:number}|null>(null);function addCategory(){input.value={mode:"add",name:""}}function editCategory(name:string){input.value={mode:"edit",name}}function removeCategory(name:string,count:number){remove.value={name,count}}function saveCategory(name:string){const d=input.value;if(!d)return;void(d.mode==="add"?createCategory(name):renameCategory(d.name,name));input.value=null}
 </script>
 
 <template>
   <nav class="sidebar">
-    <div class="brand"><span class="logo">⌘</span><span>SnipDeck</span></div>
+    <div class="brand"><span class="logo">N1</span><span>N1_Recipe</span></div>
 
     <div class="section">
       <div class="section-title">{{ t("sidebar.library") }}</div>
@@ -32,24 +33,27 @@ const views: { key: ViewName; labelKey: string; icon: string }[] = [
     </div>
 
     <div class="section grow">
-      <div class="section-title">{{ t("sidebar.categories") }}</div>
-      <button
+      <div class="section-title category-head"><span>{{ t("sidebar.categories") }}</span><button title="新建分类" @click="addCategory">＋</button></div>
+      <button class="side-item" :class="{active:store.view==='category'&&store.category===''}" @click="setView('category','')"><span class="icon">○</span><span class="label">未分类</span></button>
+      <div
         v-for="c in store.categories"
         :key="c.name"
-        class="side-item"
+        class="side-item category-item"
         :class="{ active: store.view === 'category' && store.category === c.name }"
         @click="setView('category', c.name)"
       >
         <span class="icon">▸</span>
         <span class="label">{{ c.name }}</span>
         <span class="count">{{ c.count }}</span>
-      </button>
+        <button class="mini" title="重命名" @click.stop="editCategory(c.name)">✎</button><button class="mini danger" title="删除" @click.stop="removeCategory(c.name,c.count)">×</button>
+      </div>
       <div v-if="store.categories.length === 0" class="empty-cats">
         {{ t("sidebar.noCategories") }}
       </div>
     </div>
 
     <div class="footer">
+      <button class="scratch-btn" :class="{active:store.view==='scratch'}" @click="setView('scratch')">临时区</button>
       <div class="footer-row">
         <button class="new-btn grow" @click="openCreate">
           {{ t("sidebar.newSnippet") }}
@@ -64,7 +68,7 @@ const views: { key: ViewName; labelKey: string; icon: string }[] = [
         </button>
       </div>
     </div>
-  </nav>
+  </nav><InputDialog v-if="input" :title="input.mode==='add'?'新建分类':'重命名分类'" :initial="input.name" @confirm="saveCategory" @cancel="input=null"/><ConfirmDialog v-if="remove" title="删除分类" danger confirm-text="删除" :message="remove.count?`“${remove.name}”中有 ${remove.count} 条内容，删除后将移入“未分类”。`:`确认删除“${remove.name}”？`" @confirm="deleteCategory(remove!.name);remove=null" @cancel="remove=null"/>
 </template>
 
 <style scoped>
@@ -111,6 +115,9 @@ const views: { key: ViewName; labelKey: string; icon: string }[] = [
   text-transform: uppercase;
   color: var(--text-faint);
 }
+.category-head{display:flex;align-items:center;justify-content:space-between}.category-head button{border:0;background:transparent;color:var(--accent);font-size:16px;cursor:pointer}
+.category-item{cursor:pointer}.mini{border:0;background:transparent;color:var(--text-dim);cursor:pointer;padding:2px}.mini.danger:hover{color:var(--danger)}
+.scratch-btn{width:100%;margin-bottom:8px;padding:7px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer}.scratch-btn:hover,.scratch-btn.active{background:var(--bg-hover);color:var(--accent)}
 
 .side-item {
   display: flex;

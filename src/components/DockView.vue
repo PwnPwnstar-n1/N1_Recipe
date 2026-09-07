@@ -13,6 +13,7 @@ import {
   mouseEnterDock,
   mouseLeaveDock,
   moveSelection,
+  openTextCopy,
   setDockSettings,
   setDockState,
 } from "../dockStore";
@@ -22,6 +23,8 @@ import TemplateVariableDialog from "./TemplateVariableDialog.vue";
 const { t } = useI18n();
 const searchEl = ref<HTMLInputElement | null>(null);
 const unlisteners: (() => void)[] = [];
+const expandedId=ref<number|null>(null);
+async function copyStep(text:string){const s=dock.results.find(x=>x.id===expandedId.value);if(s)await openTextCopy(text,s.title,s.id)}
 
 function onKeydown(e: KeyboardEvent): void {
   if (dock.state !== "expanded") return;
@@ -135,6 +138,8 @@ function onRowDoubleClick(): void {
           <span class="badge" :class="`type-${s.type.toLowerCase()}`">{{ s.type }}</span>
           <span class="title">{{ s.title }}</span>
           <span v-if="s.favorite" class="star">★</span>
+          <button v-if="s.kind==='COMMAND_GROUP'" class="expand" @click.stop="expandedId=expandedId===s.id?null:s.id">{{expandedId===s.id?'收起':'展开'}}</button>
+          <div v-if="expandedId===s.id" class="steps"><div v-for="(cmd,n) in s.commands" :key="n"><code>{{cmd}}</code><button @click.stop="copyStep(cmd)">复制</button></div><button @click.stop="copyStep(s.commands.join('\n'))">复制全部</button></div>
         </div>
       </div>
       <div v-else-if="!dock.loading" class="empty">
@@ -266,6 +271,7 @@ function onRowDoubleClick(): void {
   border-left: 2px solid transparent;
   cursor: pointer;
 }
+.row{flex-wrap:wrap}.expand{border:0;background:transparent;color:var(--accent);cursor:pointer}.steps{width:100%;min-width:0;display:flex;flex-direction:column;gap:5px;padding:6px}.steps>div{display:flex;gap:6px}.steps code{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--mono)}.steps button{border:1px solid var(--border);background:var(--surface);color:var(--accent);border-radius:5px}
 
 .row:hover {
   background: var(--bg-hover);

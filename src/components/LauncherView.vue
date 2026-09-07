@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   cancelVariableDialog,
   confirmVariableDialog,
@@ -17,20 +17,6 @@ const inputEl = ref<HTMLInputElement | null>(null);
 const appWindow = getCurrentWindow();
 let unlistenFocus: (() => void) | undefined;
 
-const LAUNCHER_WIDTH = 680;
-const ROW_HEIGHT = 44;
-const MAX_ROWS = 8;
-const HEADER_HEIGHT = 56;
-
-async function resizeWindow(): Promise<void> {
-  const rows = Math.min(Math.max(launcher.results.length, 1), MAX_ROWS);
-  const height = HEADER_HEIGHT + rows * ROW_HEIGHT + 10;
-  try {
-    await appWindow.setSize(new LogicalSize(LAUNCHER_WIDTH, height));
-  } catch {
-    // non-fatal: window keeps its previous size
-  }
-}
 
 function focusSearch(): void {
   inputEl.value?.focus();
@@ -69,15 +55,12 @@ onMounted(async () => {
   // to the body).
   window.addEventListener("keydown", onKeydown);
   focusSearch();
-  await resizeWindow();
 });
 
 onUnmounted(() => {
   unlistenFocus?.();
   window.removeEventListener("keydown", onKeydown);
 });
-
-watch(() => launcher.results.length, () => void resizeWindow());
 
 // Closing the variable dialog (cancel or confirm) returns focus to search.
 watch(

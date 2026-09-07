@@ -86,6 +86,12 @@ pub struct Snippet {
     pub last_used_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub kind: String,
+    pub commands: Vec<String>,
+    pub dock_pinned: bool,
+    pub stable_id: String,
+    pub source_pack_id: String,
+    pub source_pack_version: String,
 }
 
 /// Payload for creating / updating a snippet.
@@ -105,6 +111,14 @@ pub struct SnippetInput {
     pub tags: Vec<String>,
     #[serde(default)]
     pub aliases: Vec<String>,
+    #[serde(default = "default_kind")]
+    pub kind: String,
+    #[serde(default)]
+    pub commands: Vec<String>,
+}
+
+fn default_kind() -> String {
+    "TEXT".into()
 }
 
 /// Category with snippet count, derived from the snippets table.
@@ -113,6 +127,15 @@ pub struct SnippetInput {
 pub struct CategoryInfo {
     pub name: String,
     pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScratchItem {
+    pub id: i64,
+    pub content: String,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 /// Result of a copy operation: the final text and the updated snippet.
@@ -130,6 +153,7 @@ pub enum ListView {
     Favorites,
     Recent,
     MostUsed,
+    DockPinned,
     Category(String),
 }
 
@@ -140,6 +164,7 @@ impl ListView {
             "favorites" => Some(ListView::Favorites),
             "recent" => Some(ListView::Recent),
             "most_used" => Some(ListView::MostUsed),
+            "dock_pinned" => Some(ListView::DockPinned),
             "category" => Some(ListView::Category(category.unwrap_or_default())),
             _ => None,
         }

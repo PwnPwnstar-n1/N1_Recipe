@@ -1,5 +1,5 @@
 use crate::db::Db;
-use crate::models::{CategoryInfo, CopyResult, ListView, Snippet, SnippetInput};
+use crate::models::{CategoryInfo, CopyResult, ListView, ScratchItem, Snippet, SnippetInput};
 use crate::repo::Repo;
 use crate::settings::{self, Settings};
 use std::collections::HashMap;
@@ -16,6 +16,12 @@ fn validate(input: &SnippetInput) -> CmdResult<()> {
     if input.title.trim().is_empty() {
         return Err("title is required".into());
     }
+    if input.kind != "TEXT" && input.kind != "COMMAND_GROUP" {
+        return Err("无效的 Snippet 类型".into());
+    }
+    if input.kind == "COMMAND_GROUP" && input.commands.iter().all(|c| c.trim().is_empty()) {
+        return Err("命令组至少需要一条命令".into());
+    }
     Ok(())
 }
 
@@ -27,8 +33,7 @@ pub fn list_snippets(
     view: String,
     category: Option<String>,
 ) -> CmdResult<Vec<Snippet>> {
-    let view =
-        ListView::parse(&view, category).ok_or_else(|| format!("unknown view: {view}"))?;
+    let view = ListView::parse(&view, category).ok_or_else(|| format!("unknown view: {view}"))?;
     let conn = db.0.lock().map_err(map_err)?;
     Repo::new(&conn).list(&view).map_err(map_err)
 }
@@ -71,6 +76,11 @@ pub fn toggle_favorite(db: State<'_, Db>, id: i64) -> CmdResult<Snippet> {
     let conn = db.0.lock().map_err(map_err)?;
     Repo::new(&conn).toggle_favorite(id).map_err(map_err)
 }
+#[tauri::command]
+pub fn toggle_dock_pin(db: State<'_, Db>, id: i64) -> CmdResult<Snippet> {
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn).toggle_dock_pin(id).map_err(map_err)
+}
 
 /// Copy the snippet content to the system clipboard, then bump usage_count
 /// and last_used_at. Template variables are rendered with `values` (system
@@ -87,14 +97,19 @@ pub fn copy_snippet<R: tauri::Runtime>(
     let conn = db.0.lock().map_err(map_err)?;
     let repo = Repo::new(&conn);
     let mut snippet = repo.get(id).map_err(map_err)?;
+    let source = if snippet.kind == "COMMAND_GROUP" {
+        snippet.commands.join("\n")
+    } else {
+        snippet.content.clone()
+    };
 
     // Reject before writing anything: every ordinary variable must have a value.
-    let missing = crate::template::missing_variables(&snippet.content, &values);
+    let missing = crate::template::missing_variables(&source, &values);
     if !missing.is_empty() {
         return Err(format!("missing variable values: {}", missing.join(", ")));
     }
 
-    let text = crate::template::render_with_system(&app, &snippet.content, &values);
+    let text = crate::template::render_with_system(&app, &source, &values);
     app.clipboard().write_text(text.clone()).map_err(map_err)?;
     repo.record_usage(id).map_err(map_err)?;
     snippet.usage_count += 1;
@@ -108,13 +123,128 @@ pub fn copy_snippet<R: tauri::Runtime>(
 pub fn list_variables(db: State<'_, Db>, id: i64) -> CmdResult<Vec<String>> {
     let conn = db.0.lock().map_err(map_err)?;
     let snippet = Repo::new(&conn).get(id).map_err(map_err)?;
-    Ok(crate::template::extract_variables(&snippet.content))
+    let source = if snippet.kind == "COMMAND_GROUP" {
+        snippet.commands.join("\n")
+    } else {
+        snippet.content
+    };
+    Ok(crate::template::extract_variables(&source))
 }
 
 #[tauri::command]
 pub fn list_categories(db: State<'_, Db>) -> CmdResult<Vec<CategoryInfo>> {
     let conn = db.0.lock().map_err(map_err)?;
     Repo::new(&conn).categories().map_err(map_err)
+}
+
+fn validate_category(name: &str) -> CmdResult<&str> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("分类名称不能为空".into());
+    }
+    if name.chars().count() > 80 {
+        return Err("分类名称不能超过 80 个字符".into());
+    }
+    Ok(name)
+}
+
+#[tauri::command]
+pub fn create_category(db: State<'_, Db>, name: String) -> CmdResult<()> {
+    let name = validate_category(&name)?;
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn).create_category(name).map_err(|e| {
+        if e.to_string().contains("UNIQUE") {
+            "分类名称已存在".into()
+        } else {
+            map_err(e)
+        }
+    })
+}
+#[tauri::command]
+pub fn rename_category(db: State<'_, Db>, old_name: String, new_name: String) -> CmdResult<()> {
+    let new_name = validate_category(&new_name)?;
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn)
+        .rename_category(&old_name, new_name)
+        .map_err(|e| {
+            if e.to_string().contains("UNIQUE") {
+                "分类名称已存在".into()
+            } else {
+                map_err(e)
+            }
+        })
+}
+#[tauri::command]
+pub fn delete_category(db: State<'_, Db>, name: String) -> CmdResult<()> {
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn).delete_category(&name).map_err(map_err)
+}
+
+#[tauri::command]
+pub fn list_scratch_items(db: State<'_, Db>) -> CmdResult<Vec<ScratchItem>> {
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn).scratch_list().map_err(map_err)
+}
+#[tauri::command]
+pub fn create_scratch_item(db: State<'_, Db>, content: String) -> CmdResult<ScratchItem> {
+    if content.trim().is_empty() {
+        return Err("临时内容不能为空".into());
+    }
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn).scratch_create(&content).map_err(map_err)
+}
+#[tauri::command]
+pub fn update_scratch_item(db: State<'_, Db>, id: i64, content: String) -> CmdResult<()> {
+    if content.trim().is_empty() {
+        return Err("临时内容不能为空".into());
+    }
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn)
+        .scratch_update(id, &content)
+        .map_err(map_err)
+}
+#[tauri::command]
+pub fn delete_scratch_item(db: State<'_, Db>, id: i64) -> CmdResult<()> {
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn).scratch_delete(id).map_err(map_err)
+}
+#[tauri::command]
+pub fn clear_scratch_items(db: State<'_, Db>) -> CmdResult<()> {
+    let conn = db.0.lock().map_err(map_err)?;
+    Repo::new(&conn).scratch_clear().map_err(map_err)
+}
+
+#[tauri::command]
+pub fn copy_text<R: tauri::Runtime>(app: AppHandle<R>, text: String) -> CmdResult<()> {
+    app.clipboard().write_text(text).map_err(map_err)
+}
+
+#[tauri::command]
+pub fn list_text_variables(text: String) -> Vec<String> {
+    crate::template::extract_variables(&text)
+}
+
+#[tauri::command]
+pub fn copy_template_text<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    db: State<'_, Db>,
+    text: String,
+    values: HashMap<String, String>,
+    snippet_id: Option<i64>,
+) -> CmdResult<String> {
+    let missing = crate::template::missing_variables(&text, &values);
+    if !missing.is_empty() {
+        return Err(format!("缺少变量值：{}", missing.join(", ")));
+    }
+    let rendered = crate::template::render_with_system(&app, &text, &values);
+    app.clipboard()
+        .write_text(rendered.clone())
+        .map_err(map_err)?;
+    if let Some(id) = snippet_id {
+        let conn = db.0.lock().map_err(map_err)?;
+        Repo::new(&conn).record_usage(id).map_err(map_err)?;
+    }
+    Ok(rendered)
 }
 
 #[tauri::command]
@@ -125,10 +255,7 @@ pub fn get_settings<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<Settings>
 /// Persist the UI language. The frontend applies it to vue-i18n
 /// immediately, so the switch takes effect without a restart.
 #[tauri::command]
-pub fn set_language<R: tauri::Runtime>(
-    app: AppHandle<R>,
-    language: String,
-) -> CmdResult<Settings> {
+pub fn set_language<R: tauri::Runtime>(app: AppHandle<R>, language: String) -> CmdResult<Settings> {
     settings::validate_language(&language)?;
     let path = settings::app_settings_path(&app)?;
     let mut current = settings::load(&path)?;
@@ -331,6 +458,8 @@ pub fn export_snippets(db: State<'_, Db>, path: String) -> CmdResult<u32> {
                 usage_count: s.usage_count,
                 created_at: s.created_at,
                 updated_at: s.updated_at,
+                kind: s.kind,
+                commands: s.commands,
             })
             .collect(),
     };
@@ -345,13 +474,53 @@ pub fn export_snippets(db: State<'_, Db>, path: String) -> CmdResult<u32> {
 /// single transaction. Validation happens entirely before any database
 /// write; any error leaves the database unchanged.
 #[tauri::command]
-pub fn import_snippets(
-    db: State<'_, Db>,
-    path: String,
-) -> CmdResult<crate::backup::ImportSummary> {
-    let json =
-        std::fs::read_to_string(&path).map_err(|e| format!("import failed: {e}"))?;
+pub fn import_snippets(db: State<'_, Db>, path: String) -> CmdResult<crate::backup::ImportSummary> {
+    let json = std::fs::read_to_string(&path).map_err(|e| format!("import failed: {e}"))?;
     let backup = crate::backup::parse_and_validate(&json)?;
     let conn = db.0.lock().map_err(map_err)?;
     Repo::new(&conn).import_backup(&backup).map_err(map_err)
+}
+
+fn read_pack(path: &str) -> CmdResult<crate::recipe_pack::Pack> {
+    let meta = std::fs::metadata(path).map_err(|_| "无法读取配方包文件".to_string())?;
+    if meta.len() > crate::recipe_pack::MAX_FILE_SIZE {
+        return Err("配方包超过 10 MB 限制".into());
+    }
+    let raw =
+        std::fs::read_to_string(path).map_err(|_| "配方包必须是有效的 UTF-8 文件".to_string())?;
+    crate::recipe_pack::parse(&raw)
+}
+#[tauri::command]
+pub fn preview_recipe_pack(
+    db: State<'_, Db>,
+    path: String,
+) -> CmdResult<crate::recipe_pack::Preview> {
+    let pack = read_pack(&path)?;
+    let conn = db.0.lock().map_err(map_err)?;
+    crate::recipe_pack::preview(&conn, &pack)
+}
+#[tauri::command]
+pub fn import_recipe_pack(
+    db: State<'_, Db>,
+    path: String,
+    strategy: String,
+) -> CmdResult<crate::recipe_pack::ImportResult> {
+    let pack = read_pack(&path)?;
+    let conn = db.0.lock().map_err(map_err)?;
+    crate::recipe_pack::import(&conn, &pack, &strategy)
+}
+#[tauri::command]
+pub fn export_recipe_pack(
+    db: State<'_, Db>,
+    path: String,
+    package: crate::recipe_pack::PackageMeta,
+    category: Option<String>,
+    ids: Vec<i64>,
+) -> CmdResult<u32> {
+    let conn = db.0.lock().map_err(map_err)?;
+    let pack = crate::recipe_pack::export(&conn, package, category.as_deref(), &ids)?;
+    let count = pack.recipes.len() as u32;
+    std::fs::write(path, serde_json::to_string_pretty(&pack).map_err(map_err)?)
+        .map_err(|_| "无法写入配方包文件".to_string())?;
+    Ok(count)
 }

@@ -176,7 +176,10 @@ pub fn validate_shortcut(shortcut: &str) -> Result<(), String> {
 
 fn is_valid_key(token: &str) -> bool {
     if token.len() == 1 {
-        return token.chars().next().is_some_and(|c| c.is_ascii_alphanumeric());
+        return token
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric());
     }
     matches!(
         token,
@@ -194,7 +197,18 @@ fn is_valid_key(token: &str) -> bool {
             | "ArrowDown"
             | "ArrowLeft"
             | "ArrowRight"
-            | "F1" | "F2" | "F3" | "F4" | "F5" | "F6" | "F7" | "F8" | "F9" | "F10" | "F11" | "F12"
+            | "F1"
+            | "F2"
+            | "F3"
+            | "F4"
+            | "F5"
+            | "F6"
+            | "F7"
+            | "F8"
+            | "F9"
+            | "F10"
+            | "F11"
+            | "F12"
     )
 }
 
@@ -237,7 +251,10 @@ mod tests {
     use super::*;
 
     fn temp_path(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("snipdeck-settings-test-{}-{name}.json", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "snipdeck-settings-test-{}-{name}.json",
+            std::process::id()
+        ))
     }
 
     #[test]
@@ -272,7 +289,11 @@ mod tests {
     #[test]
     fn unknown_future_fields_are_tolerated() {
         let path = temp_path("future-fields");
-        std::fs::write(&path, r#"{ "language": "en-US", "dock": { "enabled": true } }"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{ "language": "en-US", "dock": { "enabled": true } }"#,
+        )
+        .unwrap();
         let loaded = load(&path).unwrap();
         assert_eq!(loaded.language.as_deref(), Some("en-US"));
         // old file without launcher section falls back to defaults
@@ -360,7 +381,11 @@ mod tests {
     #[test]
     fn dock_section_partial_falls_back_per_field() {
         let path = temp_path("dock-partial");
-        std::fs::write(&path, r#"{ "dock": { "enabled": true, "position": "left" } }"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{ "dock": { "enabled": true, "position": "left" } }"#,
+        )
+        .unwrap();
         let loaded = load(&path).unwrap();
         assert!(loaded.dock.enabled);
         assert_eq!(loaded.dock.position, "left");

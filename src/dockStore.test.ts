@@ -44,6 +44,8 @@ function snippet(id: number, title: string, favorite = false): Snippet {
     lastUsedAt: null,
     createdAt: 1,
     updatedAt: 1,
+    kind: "TEXT",
+    commands: [],
   };
 }
 
@@ -162,13 +164,13 @@ describe("dock hover state machine", () => {
 });
 
 describe("dock content", () => {
-  it("idle content merges favorites + recent without duplicates", async () => {
+  it("idle content shows only explicitly Dock-pinned recipes", async () => {
     mockedApi.listSnippets.mockImplementation(async (view) => {
       if (view === "favorites") return [snippet(1, "fav", true), snippet(2, "both", true)];
       return [snippet(2, "both"), snippet(3, "recent")];
     });
     await loadContent();
-    expect(dock.results.map((s) => s.id)).toEqual([1, 2, 3]);
+    expect(dock.results.map((s) => s.id)).toEqual([2, 3]);
     expect(dock.selectedIndex).toBe(0);
   });
 

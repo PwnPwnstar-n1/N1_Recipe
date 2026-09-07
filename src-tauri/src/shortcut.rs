@@ -19,10 +19,7 @@ pub struct ShortcutManager {
 /// `register_internal` with the handler), so calling `register()` first
 /// would register the same hotkey twice — the second attempt fails and the
 /// first registration leaks. `on_shortcut` alone is the single atomic step.
-pub fn register_shortcut<R: Runtime>(
-    app: &AppHandle<R>,
-    shortcut: &str,
-) -> Result<(), String> {
+pub fn register_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut: &str) -> Result<(), String> {
     app.global_shortcut()
         .on_shortcut(shortcut, |app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
@@ -39,9 +36,7 @@ pub fn unregister_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut: &str) {
 }
 
 /// Read the currently registered shortcut from the managed state.
-pub fn registered_shortcut<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<Option<String>, String> {
+pub fn registered_shortcut<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
     let state = app.state::<std::sync::Mutex<ShortcutManager>>();
     let guard = state.lock().map_err(|e| e.to_string())?;
     Ok(guard.registered.clone())

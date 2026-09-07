@@ -5,6 +5,7 @@ import type {
   Snippet,
   SnippetInput,
   ViewName,
+  ScratchItem,
 } from "./types";
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -48,6 +49,7 @@ export function deleteSnippet(id: number): Promise<void> {
 export function toggleFavorite(id: number): Promise<Snippet> {
   return call<Snippet>("toggle_favorite", { id });
 }
+export const toggleDockPin=(id:number)=>call<Snippet>("toggle_dock_pin",{id});
 
 export function copySnippet(id: number, values: Record<string, string>): Promise<CopyResult> {
   return call<CopyResult>("copy_snippet", { id, values });
@@ -60,6 +62,17 @@ export function listVariables(id: number): Promise<string[]> {
 export function listCategories(): Promise<CategoryInfo[]> {
   return call<CategoryInfo[]>("list_categories");
 }
+export const createCategory=(name:string)=>call<void>("create_category",{name});
+export const renameCategory=(oldName:string,newName:string)=>call<void>("rename_category",{oldName,newName});
+export const deleteCategory=(name:string)=>call<void>("delete_category",{name});
+export const listScratchItems=()=>call<ScratchItem[]>("list_scratch_items");
+export const createScratchItem=(content:string)=>call<ScratchItem>("create_scratch_item",{content});
+export const updateScratchItem=(id:number,content:string)=>call<void>("update_scratch_item",{id,content});
+export const deleteScratchItem=(id:number)=>call<void>("delete_scratch_item",{id});
+export const clearScratchItems=()=>call<void>("clear_scratch_items");
+export const copyText=(text:string)=>call<void>("copy_text",{text});
+export const listTextVariables=(text:string)=>call<string[]>("list_text_variables",{text});
+export const copyTemplateText=(text:string,values:Record<string,string>,snippetId?:number)=>call<string>("copy_template_text",{text,values,snippetId:snippetId??null});
 
 export interface Settings {
   language: string | null;
@@ -136,3 +149,8 @@ export function showLauncher(): Promise<void> {
 export function hideLauncher(): Promise<void> {
   return call<void>("hide_launcher");
 }
+export interface PackPreview{package:{id:string;name:string;version:string;description:string;author:string;homepage:string};categoryCount:number;recipeCount:number;textCount:number;commandGroupCount:number;types:string[];tags:string[];conflicts:number}
+export interface PackImportResult{added:number;updated:number;skipped:number;failed:number;categoriesAdded:number;categoriesReused:number}
+export const previewRecipePack=(path:string)=>call<PackPreview>("preview_recipe_pack",{path});
+export const importRecipePack=(path:string,strategy:string)=>call<PackImportResult>("import_recipe_pack",{path,strategy});
+export const exportRecipePack=(path:string,packageMeta:Record<string,unknown>,category:string|null,ids:number[])=>call<number>("export_recipe_pack",{path,package:packageMeta,category,ids});

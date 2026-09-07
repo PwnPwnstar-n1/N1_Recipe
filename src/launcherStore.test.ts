@@ -35,6 +35,8 @@ function snippet(id: number, title: string): Snippet {
     lastUsedAt: null,
     createdAt: 1,
     updatedAt: 1,
+    kind: "TEXT",
+    commands: [],
   };
 }
 

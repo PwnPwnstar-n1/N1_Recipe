@@ -92,8 +92,12 @@ fn create_search_update_delete_via_ipc() {
     let (_app, webview) = setup();
 
     // create — camelCase payload keys must map onto the Rust command args
-    let created = invoke(&webview, "create_snippet", json!({ "input": sample_input() }))
-        .expect("create_snippet failed");
+    let created = invoke(
+        &webview,
+        "create_snippet",
+        json!({ "input": sample_input() }),
+    )
+    .expect("create_snippet failed");
     assert_eq!(created["title"], "ret2libc EXP Template");
     assert_eq!(created["type"], "EXP");
     assert_eq!(created["usageCount"], 0);
@@ -125,8 +129,8 @@ fn create_search_update_delete_via_ipc() {
     assert_eq!(updated["tags"], json!(["git"]));
 
     // delete
-    let deleted = invoke(&webview, "delete_snippet", json!({ "id": id }))
-        .expect("delete_snippet failed");
+    let deleted =
+        invoke(&webview, "delete_snippet", json!({ "id": id })).expect("delete_snippet failed");
     assert_eq!(deleted, Value::Null);
 
     let hits = invoke(&webview, "search_snippets", json!({ "query": "changed" }))
@@ -137,8 +141,12 @@ fn create_search_update_delete_via_ipc() {
 #[test]
 fn views_and_favorites_via_ipc() {
     let (_app, webview) = setup();
-    let _a = invoke(&webview, "create_snippet", json!({ "input": sample_input() }))
-        .expect("create failed");
+    let _a = invoke(
+        &webview,
+        "create_snippet",
+        json!({ "input": sample_input() }),
+    )
+    .expect("create failed");
     let b = invoke(
         &webview,
         "create_snippet",
@@ -156,14 +164,22 @@ fn views_and_favorites_via_ipc() {
     let b_id = b["id"].as_i64().unwrap();
 
     invoke(&webview, "toggle_favorite", json!({ "id": b_id })).expect("toggle failed");
-    let favs = invoke(&webview, "list_snippets", json!({ "view": "favorites", "category": null }))
-        .expect("list failed");
+    let favs = invoke(
+        &webview,
+        "list_snippets",
+        json!({ "view": "favorites", "category": null }),
+    )
+    .expect("list failed");
     let favs = favs.as_array().unwrap();
     assert_eq!(favs.len(), 1);
     assert_eq!(favs[0]["id"], b_id);
 
-    let all = invoke(&webview, "list_snippets", json!({ "view": "all", "category": null }))
-        .expect("list failed");
+    let all = invoke(
+        &webview,
+        "list_snippets",
+        json!({ "view": "all", "category": null }),
+    )
+    .expect("list failed");
     assert_eq!(all.as_array().unwrap().len(), 2);
 
     // categories
@@ -180,8 +196,12 @@ fn copy_via_ipc_writes_clipboard_and_bumps_usage() {
     // preserve whatever was in the user's clipboard and restore it afterwards
     let original = handle.clipboard().read_text().unwrap_or_default();
 
-    let created = invoke(&webview, "create_snippet", json!({ "input": sample_input() }))
-        .expect("create failed");
+    let created = invoke(
+        &webview,
+        "create_snippet",
+        json!({ "input": sample_input() }),
+    )
+    .expect("create failed");
     let id = created["id"].as_i64().unwrap();
 
     let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": {} }))
@@ -191,7 +211,10 @@ fn copy_via_ipc_writes_clipboard_and_bumps_usage() {
     assert!(result["snippet"]["lastUsedAt"].is_i64());
 
     // the OS clipboard must actually contain the copied text
-    let clipboard_text = handle.clipboard().read_text().expect("failed to read clipboard");
+    let clipboard_text = handle
+        .clipboard()
+        .read_text()
+        .expect("failed to read clipboard");
     assert_eq!(clipboard_text, "from pwn import *\np = process('./binary')");
 
     handle
@@ -251,17 +274,24 @@ fn template_case1_ordinary_variable() {
     let id = create_with_content(&webview, "greet", "Hello {{name}}");
 
     // dialog would be built from this list
-    let vars = invoke(&webview, "list_variables", json!({ "id": id }))
-        .expect("list_variables failed");
+    let vars =
+        invoke(&webview, "list_variables", json!({ "id": id })).expect("list_variables failed");
     assert_eq!(vars, json!(["name"]));
 
-    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": { "name": "N1" } }))
-        .expect("copy_snippet failed");
+    let result = invoke(
+        &webview,
+        "copy_snippet",
+        json!({ "id": id, "values": { "name": "N1" } }),
+    )
+    .expect("copy_snippet failed");
     assert_eq!(result["text"], "Hello N1");
     assert_eq!(result["snippet"]["usageCount"], 1);
     assert_eq!(handle.clipboard().read_text().unwrap(), "Hello N1");
 
-    handle.clipboard().write_text(original).expect("restore clipboard failed");
+    handle
+        .clipboard()
+        .write_text(original)
+        .expect("restore clipboard failed");
 }
 
 #[test]
@@ -274,33 +304,36 @@ fn template_case2_system_variable_only_no_dialog() {
     let id = create_with_content(&webview, "ts", "Generated: {{datetime}}");
 
     // no ordinary variables -> the frontend would copy without a dialog
-    let vars = invoke(&webview, "list_variables", json!({ "id": id }))
-        .expect("list_variables failed");
+    let vars =
+        invoke(&webview, "list_variables", json!({ "id": id })).expect("list_variables failed");
     assert_eq!(vars, json!([]));
 
     let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": {} }))
         .expect("copy_snippet failed");
     let text = result["text"].as_str().unwrap();
-    assert!(is_datetime_template(text), "unexpected datetime text: {text}");
+    assert!(
+        is_datetime_template(text),
+        "unexpected datetime text: {text}"
+    );
     assert_eq!(result["snippet"]["usageCount"], 1);
     assert_eq!(handle.clipboard().read_text().unwrap(), text);
 
-    handle.clipboard().write_text(original).expect("restore clipboard failed");
+    handle
+        .clipboard()
+        .write_text(original)
+        .expect("restore clipboard failed");
 }
 
 /// `Generated: YYYY-MM-DD HH:mm:ss`
 fn is_datetime_template(text: &str) -> bool {
     let rest = text.strip_prefix("Generated: ").unwrap_or_default();
     rest.len() == "YYYY-MM-DD HH:mm:ss".len()
-        && rest
-            .chars()
-            .enumerate()
-            .all(|(i, c)| match i {
-                4 | 7 => c == '-',
-                13 | 16 => c == ':',
-                10 => c == ' ',
-                _ => c.is_ascii_digit(),
-            })
+        && rest.chars().enumerate().all(|(i, c)| match i {
+            4 | 7 => c == '-',
+            13 | 16 => c == ':',
+            10 => c == ' ',
+            _ => c.is_ascii_digit(),
+        })
 }
 
 #[test]
@@ -319,18 +352,25 @@ fn template_case3_clipboard_and_ordinary_variable() {
     let content = "Analyze:\n\n{{clipboard}}\n\nGoal:\n{{goal}}";
     let id = create_with_content(&webview, "analyze", content);
 
-    let vars = invoke(&webview, "list_variables", json!({ "id": id }))
-        .expect("list_variables failed");
+    let vars =
+        invoke(&webview, "list_variables", json!({ "id": id })).expect("list_variables failed");
     assert_eq!(vars, json!(["goal"]));
 
-    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": { "goal": "G1" } }))
-        .expect("copy_snippet failed");
+    let result = invoke(
+        &webview,
+        "copy_snippet",
+        json!({ "id": id, "values": { "goal": "G1" } }),
+    )
+    .expect("copy_snippet failed");
     let expected = "Analyze:\n\nctx from clipboard\n\nGoal:\nG1";
     assert_eq!(result["text"], expected);
     assert_eq!(handle.clipboard().read_text().unwrap(), expected);
     assert_eq!(result["snippet"]["usageCount"], 1);
 
-    handle.clipboard().write_text(original).expect("restore clipboard failed");
+    handle
+        .clipboard()
+        .write_text(original)
+        .expect("restore clipboard failed");
 }
 
 #[test]
@@ -350,7 +390,10 @@ fn template_empty_value_replaces_with_empty_string() {
     assert_eq!(result["text"], "Please: ");
     assert_eq!(result["snippet"]["usageCount"], 1);
 
-    handle.clipboard().write_text(original).expect("restore clipboard failed");
+    handle
+        .clipboard()
+        .write_text(original)
+        .expect("restore clipboard failed");
 }
 
 #[test]
@@ -360,7 +403,10 @@ fn template_missing_values_rejected_without_counting() {
 
     let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": {} }));
     let err = result.unwrap_err();
-    assert!(err.contains("missing variable values"), "unexpected error: {err}");
+    assert!(
+        err.contains("missing variable values"),
+        "unexpected error: {err}"
+    );
     assert!(err.contains("host") && err.contains("port"));
 
     // usage_count must NOT have been incremented
@@ -368,7 +414,11 @@ fn template_missing_values_rejected_without_counting() {
     assert_eq!(snippet["usageCount"], 0);
 
     // partial values are also rejected
-    let result = invoke(&webview, "copy_snippet", json!({ "id": id, "values": { "host": "h" } }));
+    let result = invoke(
+        &webview,
+        "copy_snippet",
+        json!({ "id": id, "values": { "host": "h" } }),
+    );
     assert!(result.is_err());
     let snippet = invoke(&webview, "get_snippet", json!({ "id": id })).expect("get failed");
     assert_eq!(snippet["usageCount"], 0);
@@ -397,7 +447,6 @@ fn template_dialog_cancel_contract_no_copy_invocation() {
 // the mock runtime's path resolver would read/write the REAL
 // settings.json. The settings module itself is unit-tested, and the real
 // persistence flow is covered by runtime verification.
-
 
 #[test]
 fn launcher_lifecycle_commands_wiring() {

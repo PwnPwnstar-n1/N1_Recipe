@@ -9,6 +9,7 @@ export interface DockVariableDialog {
   id: number;
   title: string;
   variables: string[];
+  text?: string;
 }
 
 /// Dock-window state. Deliberately separate from the main store and the
@@ -74,8 +75,8 @@ export async function loadContent(): Promise<void> {
   dock.loading = true;
   try {
     const [favorites, recent] = await Promise.all([
-      api.listSnippets("favorites"),
-      api.listSnippets("recent"),
+      api.listSnippets("dock_pinned"),
+      Promise.resolve([] as Snippet[]),
     ]);
     dock.favorites = favorites;
     dock.recent = recent;
@@ -190,6 +191,7 @@ async function performCopy(id: number, values: Record<string, string>): Promise<
   const res = await api.copySnippet(id, values);
   return res.text;
 }
+export async function openTextCopy(text:string,title:string,id:number):Promise<void>{try{const variables=await api.listTextVariables(text);if(variables.length){dock.variableDialog={id,title,variables,text};return}await api.copyTemplateText(text,{},id);finishCopy()}catch(err){dock.error=localizeError(err)}}
 
 /// Enter/click-copy on a result: template snippets open the variable dialog;
 /// plain and system-variable snippets copy immediately (system variables are
@@ -224,7 +226,7 @@ export async function confirmVariableDialog(
   // close immediately so a double Enter cannot copy twice; restore on error
   dock.variableDialog = null;
   try {
-    await performCopy(dialog.id, values);
+    if(dialog.text!==undefined)await api.copyTemplateText(dialog.text,values,dialog.id);else await performCopy(dialog.id, values);
     finishCopy();
   } catch (err) {
     dock.error = localizeError(err);

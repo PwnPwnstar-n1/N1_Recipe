@@ -28,7 +28,7 @@ fn scan_variables(content: &str) -> Vec<String> {
     while i + 1 < bytes.len() {
         if bytes[i] == b'{' && bytes[i + 1] == b'{' {
             if let Some(end) = find_token_end(content, i) {
-                let name = &content[i + 2..end];
+                let name = content[i + 2..end].trim();
                 if is_valid_name(name) {
                     names.push(name.to_string());
                 }
@@ -52,7 +52,7 @@ pub fn render(content: &str, values: &HashMap<String, String>) -> String {
     while i + 1 < bytes.len() {
         if bytes[i] == b'{' && bytes[i + 1] == b'{' {
             if let Some(end) = find_token_end(content, i) {
-                let name = &content[i + 2..end];
+                let name = content[i + 2..end].trim();
                 if is_valid_name(name) {
                     if let Some(value) = values.get(name) {
                         out.push_str(&content[pos..i]);
@@ -85,10 +85,7 @@ pub fn render_with_system<R: tauri::Runtime>(
         "datetime".into(),
         now.format("%Y-%m-%d %H:%M:%S").to_string(),
     );
-    let clipboard = app
-        .clipboard()
-        .read_text()
-        .unwrap_or_default();
+    let clipboard = app.clipboard().read_text().unwrap_or_default();
     values.insert("clipboard".into(), clipboard);
     render(content, &values)
 }
@@ -116,14 +113,8 @@ fn find_token_end(content: &str, i: usize) -> Option<usize> {
     None
 }
 
-/// `[a-zA-Z_][a-zA-Z0-9_]*`
 fn is_valid_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
-        _ => return false,
-    }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    !name.trim().is_empty() && !name.contains(['{', '}'])
 }
 
 #[cfg(test)]
@@ -169,7 +160,7 @@ mod tests {
     #[test]
     fn extract_ignores_invalid_tokens() {
         let content = "{{ }} {{123}} {{a-b}} {{}} {name} {{name}} }x{ {{unclosed";
-        assert_eq!(extract_variables(content), vec!["name"]);
+        assert_eq!(extract_variables(content), vec!["123", "a-b", "name"]);
     }
 
     #[test]
@@ -181,15 +172,36 @@ mod tests {
     }
 
     #[test]
+    fn unicode_spaces_hyphens_and_trim_are_supported() {
+        assert_eq!(
+            extract_variables("{{ 文章路径 }} {{项目 名称}} {{目标-IP}} {{文章路径}}"),
+            vec!["文章路径", "项目 名称", "目标-IP"]
+        );
+        assert_eq!(
+            render(
+                "{{ 文章路径 }}",
+                &values(&[("文章路径", r#"C:\\a\$1\"q\""#)])
+            ),
+            r#"C:\\a\$1\"q\""#
+        );
+    }
+
+    #[test]
     fn render_replaces_all_occurrences() {
         let content = "Target: {{host}}:{{port}}\nAgain: {{host}}";
-        let rendered = render(content, &values(&[("host", "example.com"), ("port", "443")]));
+        let rendered = render(
+            content,
+            &values(&[("host", "example.com"), ("port", "443")]),
+        );
         assert_eq!(rendered, "Target: example.com:443\nAgain: example.com");
     }
 
     #[test]
     fn render_empty_string_value() {
-        assert_eq!(render("Hello {{name}}!", &values(&[("name", "")])), "Hello !");
+        assert_eq!(
+            render("Hello {{name}}!", &values(&[("name", "")])),
+            "Hello !"
+        );
     }
 
     #[test]

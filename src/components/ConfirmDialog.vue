@@ -1,0 +1,1 @@
+<script setup lang="ts">import AppDialog from"./AppDialog.vue";defineProps<{title:string;message:string;danger?:boolean;confirmText?:string}>();defineEmits<{confirm:[];cancel:[]}>();</script><template><AppDialog :title="title" :danger="danger" :confirm-text="confirmText" @confirm="$emit('confirm')" @cancel="$emit('cancel')"><p>{{message}}</p></AppDialog></template>

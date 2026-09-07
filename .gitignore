@@ -9,6 +9,16 @@ lerna-debug.log*
 
 node_modules
 dist
+src-tauri/target
+*.db
+*.db-*
+*.n1recipe.json
+!examples/packs/*.n1recipe.json
+.env
+.env.*
+*.pem
+*.key
+测试bug记录.txt
 dist-ssr
 *.local
 

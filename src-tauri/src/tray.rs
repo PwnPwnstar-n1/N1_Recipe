@@ -25,22 +25,30 @@ pub mod menu_id {
 }
 
 /// Localized menu labels for the current language.
-fn labels(lang: &str) -> (&'static str, &'static str, &'static str, &'static str, &'static str) {
+fn labels(
+    lang: &str,
+) -> (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+) {
     if lang == "zh-CN" {
         (
-            "打开 SnipDeck",
+            "打开 N1_Recipe",
             "打开快速启动器",
             "显示桌面 Dock",
             "隐藏桌面 Dock",
-            "退出 SnipDeck",
+            "退出 N1_Recipe",
         )
     } else {
         (
-            "Open SnipDeck",
+            "Open N1_Recipe",
             "Open Quick Launcher",
             "Show Desktop Dock",
             "Hide Desktop Dock",
-            "Quit SnipDeck",
+            "Quit N1_Recipe",
         )
     }
 }
@@ -59,10 +67,7 @@ fn build_menu<R: Runtime>(
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_i = MenuItem::with_id(app, menu_id::QUIT, quit, true, None::<&str>)?;
 
-    Menu::with_items(
-        app,
-        &[&open_i, &launcher_i, &dock_i, &separator, &quit_i],
-    )
+    Menu::with_items(app, &[&open_i, &launcher_i, &dock_i, &separator, &quit_i])
 }
 
 /// Toggle the desktop dock (same persist + apply semantics as the Settings
@@ -101,11 +106,15 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
 }
 
 /// Create the (single) tray icon and its menu. Called once during app setup.
-pub fn create_tray<R: Runtime>(app: &AppHandle<R>, lang: &str, dock_enabled: bool) -> tauri::Result<()> {
+pub fn create_tray<R: Runtime>(
+    app: &AppHandle<R>,
+    lang: &str,
+    dock_enabled: bool,
+) -> tauri::Result<()> {
     let menu = build_menu(app, lang, dock_enabled)?;
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip("SnipDeck")
+        .tooltip("N1_Recipe")
         .menu(&menu)
         // Left click restores the main window (handled below); right click
         // still opens the context menu (Windows convention).
@@ -184,21 +193,21 @@ mod tests {
     #[test]
     fn localized_labels() {
         let zh = labels("zh-CN");
-        assert_eq!(zh.0, "打开 SnipDeck");
+        assert_eq!(zh.0, "打开 N1_Recipe");
         assert_eq!(zh.1, "打开快速启动器");
         assert_eq!(zh.2, "显示桌面 Dock");
         assert_eq!(zh.3, "隐藏桌面 Dock");
-        assert_eq!(zh.4, "退出 SnipDeck");
+        assert_eq!(zh.4, "退出 N1_Recipe");
 
         let en = labels("en-US");
-        assert_eq!(en.0, "Open SnipDeck");
+        assert_eq!(en.0, "Open N1_Recipe");
         assert_eq!(en.1, "Open Quick Launcher");
         assert_eq!(en.2, "Show Desktop Dock");
         assert_eq!(en.3, "Hide Desktop Dock");
-        assert_eq!(en.4, "Quit SnipDeck");
+        assert_eq!(en.4, "Quit N1_Recipe");
 
         // Any non-zh language falls back to English.
         let fr = labels("fr-FR");
-        assert_eq!(fr.0, "Open SnipDeck");
+        assert_eq!(fr.0, "Open N1_Recipe");
     }
 }

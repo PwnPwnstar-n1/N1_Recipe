@@ -2,6 +2,7 @@ pub mod backup;
 pub mod commands;
 pub mod db;
 pub mod models;
+pub mod recipe_pack;
 mod repo;
 mod seed;
 pub mod settings;
@@ -45,8 +46,8 @@ pub fn run() {
             app.manage(Mutex::new(shortcut::ShortcutManager::default()));
             app.manage(QuitState(AtomicBool::new(false)));
 
-            let settings = settings::load(&settings::app_settings_path(app.handle())?)
-                .unwrap_or_default();
+            let settings =
+                settings::load(&settings::app_settings_path(app.handle())?).unwrap_or_default();
 
             // Windows are created ONCE and only show/hide at runtime (never
             // destroyed — see src/windows.rs for the wry deadlock rationale).
@@ -82,7 +83,7 @@ pub fn run() {
                         );
                     }
                     Err(e) => {
-                        eprintln!("SnipDeck: failed to register launcher shortcut: {e}");
+                        eprintln!("N1_Recipe: failed to register launcher shortcut: {e}");
                     }
                 }
             }
@@ -121,9 +122,21 @@ pub fn run() {
             commands::update_snippet,
             commands::delete_snippet,
             commands::toggle_favorite,
+            commands::toggle_dock_pin,
             commands::copy_snippet,
             commands::list_variables,
             commands::list_categories,
+            commands::create_category,
+            commands::rename_category,
+            commands::delete_category,
+            commands::list_scratch_items,
+            commands::create_scratch_item,
+            commands::update_scratch_item,
+            commands::delete_scratch_item,
+            commands::clear_scratch_items,
+            commands::copy_text,
+            commands::list_text_variables,
+            commands::copy_template_text,
             commands::get_settings,
             commands::set_language,
             commands::update_launcher_settings,
@@ -135,9 +148,12 @@ pub fn run() {
             commands::update_startup_settings,
             commands::export_snippets,
             commands::import_snippets,
+            commands::preview_recipe_pack,
+            commands::import_recipe_pack,
+            commands::export_recipe_pack,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running SnipDeck");
+        .expect("error while running N1_Recipe");
 }
 
 #[cfg(test)]

@@ -40,6 +40,13 @@ pub struct BackupSnippet {
     pub created_at: i64,
     #[serde(default)]
     pub updated_at: i64,
+    #[serde(default = "default_kind")]
+    pub kind: String,
+    #[serde(default)]
+    pub commands: Vec<String>,
+}
+fn default_kind() -> String {
+    "TEXT".into()
 }
 
 /// Result of a merge import.
@@ -67,8 +74,7 @@ pub fn validate(backup: &BackupFile) -> Result<(), String> {
         ));
     }
     for (index, snippet) in backup.snippets.iter().enumerate() {
-        validate_snippet(snippet)
-            .map_err(|e| format!("snippet #{}: {e}", index + 1))?;
+        validate_snippet(snippet).map_err(|e| format!("snippet #{}: {e}", index + 1))?;
     }
     Ok(())
 }
@@ -124,6 +130,8 @@ mod tests {
                 usage_count: 3,
                 created_at: 1,
                 updated_at: 2,
+                kind: "TEXT".into(),
+                commands: vec![],
             }],
         }
     }

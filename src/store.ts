@@ -174,7 +174,7 @@ export async function setView(view: ViewName, category = ""): Promise<void> {
   store.query = "";
   store.editor = null;
   store.settingsOpen = false;
-  await Promise.all([loadList(), loadCategories()]);
+  if (view !== "scratch") await Promise.all([loadList(), loadCategories()]);
 }
 
 export function select(id: number): void {
@@ -245,6 +245,10 @@ export async function saveSnippet(input: SnippetInput): Promise<void> {
     showToast(localizeError(err));
   }
 }
+
+export async function createCategory(name:string):Promise<void>{try{await api.createCategory(name.trim());await loadCategories();showToast("分类已创建")}catch(e){showToast(localizeError(e))}}
+export async function renameCategory(oldName:string,newName:string):Promise<void>{try{await api.renameCategory(oldName,newName.trim());if(store.category===oldName)store.category=newName.trim();await refresh();showToast("分类已重命名")}catch(e){showToast(localizeError(e))}}
+export async function deleteCategory(name:string):Promise<void>{try{await api.deleteCategory(name);if(store.category===name){store.view="all";store.category=""}await refresh();showToast("分类已删除，原内容已移入未分类")}catch(e){showToast(localizeError(e))}}
 
 /// Copy flow entry point for a snippet. Snippets with ordinary template
 /// variables open the variable dialog instead of copying immediately; the

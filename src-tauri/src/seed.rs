@@ -29,6 +29,8 @@ fn snip(
         language: language.into(),
         tags: tags.iter().map(|t| t.to_string()).collect(),
         aliases: aliases.iter().map(|a| a.to_string()).collect(),
+        kind: "TEXT".into(),
+        commands: vec![],
     }
 }
 

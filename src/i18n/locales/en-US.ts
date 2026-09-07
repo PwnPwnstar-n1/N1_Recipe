@@ -86,7 +86,7 @@ export default {
     exportData: "Export Data",
     importData: "Import Data",
     startup: "Startup",
-    launchOnBoot: "Launch SnipDeck when Windows starts",
+    launchOnBoot: "Launch N1_Recipe when Windows starts",
     startHidden: "Start hidden (tray only) when launched on boot",
   },
   dock: {
@@ -97,7 +97,7 @@ export default {
     copied: "Copied",
   },
   launcher: {
-    title: "SnipDeck Launcher",
+    title: "N1_Recipe Launcher",
     prototype: "Launcher prototype — the full launcher arrives in Phase 3.",
     hide: "Hide (prototype)",
     placeholder: "Search snippets...",

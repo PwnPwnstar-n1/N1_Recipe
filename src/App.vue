@@ -24,6 +24,8 @@ import TemplateVariableDialog from "./components/TemplateVariableDialog.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import LauncherView from "./components/LauncherView.vue";
 import DockView from "./components/DockView.vue";
+import ScratchView from "./components/ScratchView.vue";
+import {restoreAndTrackWindow} from "./windowGeometry";
 
 const { t } = useI18n();
 
@@ -31,9 +33,11 @@ const { t } = useI18n();
 // role from the window label. Only the main window boots the management UI.
 type WindowRole = "main" | "launcher" | "dock";
 const windowRole = ref<WindowRole>("main");
+let stopGeometry:(()=>void)|undefined;
 
 onMounted(async () => {
   windowRole.value = await detectWindowRole();
+  stopGeometry=await restoreAndTrackWindow(windowRole.value);
   await initSettings();
   if (windowRole.value === "main") {
     void refresh();
@@ -44,6 +48,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener("keydown", onGlobalKeydown);
+  stopGeometry?.();
 });
 
 async function detectWindowRole(): Promise<WindowRole> {
@@ -127,11 +132,12 @@ function onGlobalKeydown(e: KeyboardEvent): void {
   <div v-else class="app">
     <Sidebar />
     <section class="main-pane">
-      <SearchBar />
-      <SnippetList />
+      <ScratchView v-if="store.view === 'scratch'" />
+      <template v-else><SearchBar /><SnippetList /></template>
     </section>
     <aside class="detail-pane">
-      <SnippetEditor v-if="showEditor" />
+      <div v-if="store.view === 'scratch'" class="empty-detail"><p class="empty-title">临时区</p><p class="empty-hint">临时笔记与粘贴内容会自动保存在本机</p></div>
+      <SnippetEditor v-else-if="showEditor" />
       <SettingsPanel v-else-if="store.settingsOpen" />
       <SnippetPreview v-else-if="showPreview" />
       <div v-else class="empty-detail">
@@ -155,6 +161,8 @@ function onGlobalKeydown(e: KeyboardEvent): void {
   display: grid;
   grid-template-columns: 220px minmax(340px, 1fr) minmax(360px, 460px);
   height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .main-pane {
@@ -162,10 +170,13 @@ function onGlobalKeydown(e: KeyboardEvent): void {
   flex-direction: column;
   min-width: 0;
   background: var(--bg);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .detail-pane {
-  overflow-y: auto;
+  overflow: hidden;
+  min-height: 0;
   background: var(--bg);
   border-left: 1px solid var(--border);
 }

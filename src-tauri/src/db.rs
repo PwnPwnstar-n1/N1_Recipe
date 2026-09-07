@@ -48,6 +48,40 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX idx_snippets_category   ON snippets(category);
     CREATE INDEX idx_aliases_alias       ON aliases(alias);
     "#,
+    // v2 — v0.1.1: persistent categories, command groups and scratch area.
+    // Existing snippets remain ordinary text snippets and their categories
+    // are promoted into the new category table without changing any data.
+    r#"
+    CREATE TABLE categories (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        created_at INTEGER NOT NULL
+    );
+    INSERT OR IGNORE INTO categories (name, created_at)
+        SELECT DISTINCT trim(category), CAST(strftime('%s','now') AS INTEGER) * 1000
+        FROM snippets WHERE trim(category) != '';
+
+    ALTER TABLE snippets ADD COLUMN kind TEXT NOT NULL DEFAULT 'TEXT'
+        CHECK (kind IN ('TEXT','COMMAND_GROUP'));
+    ALTER TABLE snippets ADD COLUMN commands TEXT NOT NULL DEFAULT '[]';
+
+    CREATE TABLE scratch_items (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        content    TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_scratch_updated ON scratch_items(updated_at DESC);
+    "#,
+    // v3 — N1_Recipe local provenance and explicit Dock pins.
+    r#"
+    ALTER TABLE snippets ADD COLUMN dock_pinned INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE snippets ADD COLUMN stable_id TEXT NOT NULL DEFAULT '';
+    ALTER TABLE snippets ADD COLUMN source_pack_id TEXT NOT NULL DEFAULT '';
+    ALTER TABLE snippets ADD COLUMN source_pack_version TEXT NOT NULL DEFAULT '';
+    CREATE INDEX idx_snippets_dock_pinned ON snippets(dock_pinned);
+    CREATE UNIQUE INDEX idx_snippets_source ON snippets(source_pack_id, stable_id) WHERE source_pack_id != '' AND stable_id != '';
+    "#,
 ];
 
 /// Open (or create) the database at `path`, run pending migrations and seed
@@ -116,5 +150,24 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM snippets", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn v1_database_migrates_without_losing_snippets() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+        conn.execute("INSERT INTO snippets (title,content,type,category,language,created_at,updated_at) VALUES ('old','body','TEXT','Legacy','',1,1)", []).unwrap();
+        migrate(&mut conn).unwrap();
+        let row: (String, String, String) = conn
+            .query_row("SELECT title, kind, commands FROM snippets", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(row, ("old".into(), "TEXT".into(), "[]".into()));
+        let category: String = conn
+            .query_row("SELECT name FROM categories", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(category, "Legacy");
     }
 }
