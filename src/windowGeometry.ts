@@ -150,7 +150,7 @@ export async function restoreAndTrackWindow(label: string): Promise<() => void> 
       await win.setPosition(new PhysicalPosition(plan.geometry.x, plan.geometry.y));
       if (plan.recovered) localStorage.setItem(key, JSON.stringify(plan.geometry));
       console.info("N1_Recipe window geometry", {
-        version: "0.2.1",
+        version: "0.2.2",
         label: role,
         rawGeometry: raw,
         validation: plan.reason,

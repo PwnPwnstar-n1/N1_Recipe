@@ -1,6 +1,6 @@
 [package]
 name = "n1_recipe"
-version = "0.2.1"
+version = "0.2.2"
 description = "Personal snippet / prompt / payload quick launcher"
 authors = ["N1_Recipe"]
 edition = "2021"
