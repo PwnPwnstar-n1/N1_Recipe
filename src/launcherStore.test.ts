@@ -4,6 +4,8 @@ import {
   cancelVariableDialog,
   confirmVariableDialog,
   executeSelected,
+  executeCommandGroupAll,
+  executeCommandStep,
   launcher,
   moveSelection,
   resetLauncher,
@@ -16,6 +18,8 @@ vi.mock("./api", () => ({
   listVariables: vi.fn(),
   copySnippet: vi.fn(),
   hideLauncher: vi.fn(),
+  listTextVariables: vi.fn(),
+  copyTemplateText: vi.fn(),
 }));
 
 const mockedApi = vi.mocked(api);
@@ -47,9 +51,13 @@ beforeEach(() => {
   mockedApi.listVariables.mockReset();
   mockedApi.copySnippet.mockReset();
   mockedApi.hideLauncher.mockReset();
+  mockedApi.listTextVariables.mockReset();
+  mockedApi.copyTemplateText.mockReset();
   mockedApi.searchSnippets.mockResolvedValue([]);
   mockedApi.listVariables.mockResolvedValue([]);
   mockedApi.hideLauncher.mockResolvedValue(undefined);
+  mockedApi.listTextVariables.mockResolvedValue([]);
+  mockedApi.copyTemplateText.mockResolvedValue("rendered command");
   mockedApi.copySnippet.mockImplementation(async (id) => {
     const s = snippet(id, "t");
     return { text: "rendered", snippet: { ...s, usageCount: 1, lastUsedAt: 2 } };
@@ -174,5 +182,53 @@ describe("launcher copy flow", () => {
       title: "greet",
       variables: ["name"],
     });
+  });
+});
+
+describe("launcher command group flow", () => {
+  function group(): Snippet {
+    return {
+      ...snippet(11, "Pwn ELF 初始化"),
+      kind: "COMMAND_GROUP",
+      commands: ["file {{binary}}", "echo ready", "rizin -A {{binary}}"],
+    };
+  }
+
+  it("copies a variable-free step without opening a dialog", async () => {
+    const commandGroup = group();
+    launcher.results = [commandGroup];
+    await executeCommandStep(commandGroup, "echo ready");
+    expect(mockedApi.listTextVariables).toHaveBeenCalledWith("echo ready");
+    expect(mockedApi.copyTemplateText).toHaveBeenCalledWith("echo ready", {}, 11);
+    expect(launcher.variableDialog).toBeNull();
+  });
+
+  it("asks only for variables in the selected step", async () => {
+    const commandGroup = group();
+    launcher.results = [commandGroup];
+    mockedApi.listTextVariables.mockResolvedValue(["binary"]);
+    await executeCommandStep(commandGroup, "file {{binary}}");
+    expect(launcher.variableDialog).toEqual({
+      id: 11,
+      title: "Pwn ELF 初始化",
+      variables: ["binary"],
+      text: "file {{binary}}",
+    });
+  });
+
+  it("copy-all deduplicates variables in Rust and preserves newline format", async () => {
+    const commandGroup = group();
+    launcher.results = [commandGroup];
+    mockedApi.listTextVariables.mockResolvedValue(["binary"]);
+    await executeCommandGroupAll(commandGroup);
+    expect(mockedApi.listTextVariables).toHaveBeenCalledWith(
+      "file {{binary}}\necho ready\nrizin -A {{binary}}",
+    );
+    await confirmVariableDialog({ binary: 'C:\\lab\\a $1 "x".exe' });
+    expect(mockedApi.copyTemplateText).toHaveBeenCalledWith(
+      "file {{binary}}\necho ready\nrizin -A {{binary}}",
+      { binary: 'C:\\lab\\a $1 "x".exe' },
+      11,
+    );
   });
 });

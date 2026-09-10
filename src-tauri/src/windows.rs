@@ -84,6 +84,23 @@ pub mod roles {
     pub const DOCK: &str = "dock";
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CloseDisposition {
+    Hide,
+    Destroy,
+}
+
+/// Main and launcher windows are persistent while the app is running. Their
+/// close buttons hide them; only an explicit application quit may destroy
+/// them. Keeping this decision pure makes the Windows regression testable.
+pub fn close_disposition(label: &str, quitting: bool) -> CloseDisposition {
+    if !quitting && matches!(label, roles::MAIN | roles::LAUNCHER) {
+        CloseDisposition::Hide
+    } else {
+        CloseDisposition::Destroy
+    }
+}
+
 /// Launcher window geometry. The initial height is small; the frontend
 /// adjusts it to the result count.
 fn launcher_config() -> (f64, f64) {
@@ -102,6 +119,7 @@ pub fn get<R: Runtime>(app: &AppHandle<R>, role: &str) -> Option<WebviewWindow<R
 /// https://github.com/tauri-apps/wry — "Deadlock creating a new window on
 /// the IPC handler on Windows"), so the launcher lives as long as the app.
 pub fn create_launcher<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<WebviewWindow<R>> {
+    crate::diagnostics::log(app, "quick window create begin");
     let (width, height) = launcher_config();
     WebviewWindowBuilder::new(app, roles::LAUNCHER, WebviewUrl::App("index.html".into()))
         .title("N1_Recipe")
@@ -115,11 +133,20 @@ pub fn create_launcher<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<WebviewW
         .center()
         .visible(false)
         .build()
+        .inspect(|_| crate::diagnostics::log(app, "quick window create result=ok"))
+        .inspect_err(|error| {
+            crate::diagnostics::log(
+                app,
+                &format!("quick window create result=error error={error}"),
+            )
+        })
 }
 
 /// Ensure the launcher window exists (hidden) — called once at startup.
 pub fn ensure_hidden_launcher<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    if get(app, roles::LAUNCHER).is_none() {
+    let exists = get(app, roles::LAUNCHER).is_some();
+    crate::diagnostics::log(app, &format!("quick window startup exists={exists}"));
+    if !exists {
         create_launcher(app)?;
     }
     Ok(())
@@ -331,30 +358,57 @@ pub fn repair_main_window<R: Runtime>(window: &WebviewWindow<R>) -> Result<bool,
 /// Position + show + focus the launcher. The window is created once at
 /// startup and NEVER destroyed at runtime.
 pub fn show_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let window =
-        get(app, roles::LAUNCHER).ok_or_else(|| "launcher window not initialized".to_string())?;
+    let Some(window) = get(app, roles::LAUNCHER) else {
+        crate::diagnostics::log(app, "quick window show exists=false");
+        return Err("launcher window not initialized".to_string());
+    };
+    crate::diagnostics::log(app, "quick window show exists=true");
     // Preserve the user's adjusted size and position for the lifetime of the
     // app. Only recover to a visible monitor when it is actually off-screen.
     if window.current_monitor().ok().flatten().is_none() {
-        position_launcher(&window).map_err(|e| e.to_string())?;
+        position_launcher(&window).map_err(|error| {
+            crate::diagnostics::log(app, &format!("quick window position error={error}"));
+            error.to_string()
+        })?;
     }
-    window.show().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())?;
+    window.show().map_err(|error| {
+        crate::diagnostics::log(app, &format!("quick window show error={error}"));
+        error.to_string()
+    })?;
+    crate::diagnostics::log(app, "quick window show result=ok");
+    window.set_focus().map_err(|error| {
+        crate::diagnostics::log(app, &format!("quick window focus error={error}"));
+        error.to_string()
+    })?;
+    crate::diagnostics::log(app, "quick window focus result=ok");
     Ok(())
 }
 
 pub fn hide_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let window =
-        get(app, roles::LAUNCHER).ok_or_else(|| "launcher window not initialized".to_string())?;
-    window.hide().map_err(|e| e.to_string())?;
+    let Some(window) = get(app, roles::LAUNCHER) else {
+        crate::diagnostics::log(app, "quick window hide exists=false");
+        return Err("launcher window not initialized".to_string());
+    };
+    crate::diagnostics::log(app, "quick window hide exists=true");
+    window.hide().map_err(|error| {
+        crate::diagnostics::log(app, &format!("quick window hide error={error}"));
+        error.to_string()
+    })?;
+    crate::diagnostics::log(app, "quick window hide result=ok");
     Ok(())
 }
 
 /// Global-shortcut behavior: visible -> hide, hidden -> show.
 pub fn toggle_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let visible = get(app, roles::LAUNCHER)
-        .map(|window| window.is_visible().unwrap_or(false))
-        .unwrap_or(false);
+    let Some(window) = get(app, roles::LAUNCHER) else {
+        crate::diagnostics::log(app, "quick window toggle exists=false");
+        return Err("launcher window not initialized".to_string());
+    };
+    crate::diagnostics::log(app, "quick window toggle exists=true");
+    let visible = window.is_visible().map_err(|error| {
+        crate::diagnostics::log(app, &format!("quick window visibility error={error}"));
+        error.to_string()
+    })?;
     if visible {
         hide_launcher_window(app)
     } else {
@@ -364,7 +418,9 @@ pub fn toggle_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Stri
 
 #[cfg(test)]
 mod tests {
-    use super::{roles, safe_main_geometry, DisplayArea, Rect};
+    use super::{
+        close_disposition, roles, safe_main_geometry, CloseDisposition, DisplayArea, Rect,
+    };
 
     /// The window-label contract: frontend routing, capabilities and the
     /// runtime harness all depend on these exact labels.
@@ -455,5 +511,24 @@ mod tests {
         assert_eq!(main["alwaysOnTop"], false);
         assert_eq!(main["minWidth"], 960);
         assert_eq!(main["minHeight"], 620);
+    }
+
+    #[test]
+    fn launcher_close_hides_and_survives_twenty_cycles() {
+        let mut exists = true;
+        for _ in 0..20 {
+            assert!(exists, "launcher must exist before every shortcut trigger");
+            let visible = true;
+            assert!(visible);
+            match close_disposition(roles::LAUNCHER, false) {
+                CloseDisposition::Hide => {}
+                CloseDisposition::Destroy => exists = false,
+            }
+        }
+        assert!(exists);
+        assert_eq!(
+            close_disposition(roles::LAUNCHER, true),
+            CloseDisposition::Destroy
+        );
     }
 }

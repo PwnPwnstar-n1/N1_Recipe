@@ -107,7 +107,7 @@ fn app_version_too_high(v: &str) -> bool {
         }
         o
     }
-    nums(v) > nums("0.2.0")
+    nums(v) > nums(env!("CARGO_PKG_VERSION"))
 }
 pub fn parse(raw: &str) -> Result<Pack, String> {
     if raw.len() as u64 > MAX_FILE_SIZE {
@@ -423,6 +423,131 @@ mod tests {
         assert!(json.contains("文章标题"));
         for forbidden in ["favorite", "dockPinned", "usageCount", "lastUsedAt"] {
             assert!(!json.contains(forbidden));
+        }
+    }
+
+    fn selection_pack() -> Pack {
+        let mut selected = pack();
+        let mut text = selected.recipes[0].clone();
+        text.id = "pwn-text".into();
+        text.title = "ELF 初始分析".into();
+        text.category = "Pwn".into();
+        text.mode = "TEXT".into();
+        text.content = r#"路径 {{文章路径}} / 目标 {{目标-IP}}"#.into();
+        text.commands.clear();
+
+        let mut commands = selected.recipes[1].clone();
+        commands.id = "pwn-commands".into();
+        commands.title = "Pwn 初始化命令".into();
+        commands.category = "Pwn".into();
+        commands.mode = "COMMAND_GROUP".into();
+        commands.content.clear();
+        commands.commands = vec![
+            "file {{binary}}".into(),
+            "checksec --file={{binary}}".into(),
+        ];
+
+        let mut web = text.clone();
+        web.id = "web-text".into();
+        web.title = "Web 请求".into();
+        web.category = "Web".into();
+        web.content = "curl https://{{目标-IP}}/路径".into();
+
+        let mut chinese = text.clone();
+        chinese.id = "cn-text".into();
+        chinese.title = "中文标题".into();
+        chinese.category = "中文分类".into();
+        chinese.content = "项目：{{项目 名称}}".into();
+
+        selected.categories = vec!["Pwn".into(), "Web".into(), "中文分类".into()];
+        selected.recipes = vec![text, commands, web, chinese];
+        selected
+    }
+
+    fn database_id(conn: &Connection, title: &str) -> i64 {
+        conn.query_row(
+            "SELECT id FROM snippets WHERE title=?1",
+            params![title],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn exact_category_and_mixed_selection_exports_roundtrip() {
+        let conn = db::open_in_memory(false).unwrap();
+        let source = selection_pack();
+        assert_eq!(import(&conn, &source, "skip").unwrap().added, 4);
+        let pwn_text = database_id(&conn, "ELF 初始分析");
+        let pwn_group = database_id(&conn, "Pwn 初始化命令");
+        let web = database_id(&conn, "Web 请求");
+        let chinese = database_id(&conn, "中文标题");
+
+        assert_eq!(
+            export(&conn, source.package.clone(), None, &[pwn_text])
+                .unwrap()
+                .recipes
+                .len(),
+            1
+        );
+        assert_eq!(
+            export(&conn, source.package.clone(), None, &[pwn_text, pwn_group])
+                .unwrap()
+                .recipes
+                .len(),
+            2
+        );
+        assert_eq!(
+            export(&conn, source.package.clone(), Some("Pwn"), &[])
+                .unwrap()
+                .recipes
+                .len(),
+            2
+        );
+        assert_eq!(
+            export(
+                &conn,
+                source.package.clone(),
+                None,
+                &[pwn_text, web, chinese]
+            )
+            .unwrap()
+            .recipes
+            .len(),
+            3
+        );
+        let manual = export(&conn, source.package.clone(), None, &[pwn_text, web]).unwrap();
+        assert_eq!(manual.recipes.len(), 2);
+        assert!(!manual
+            .recipes
+            .iter()
+            .any(|recipe| recipe.title == "Pwn 初始化命令"));
+        assert_eq!(
+            export(&conn, source.package.clone(), None, &[])
+                .unwrap()
+                .recipes
+                .len(),
+            4
+        );
+
+        let exported = export(&conn, source.package.clone(), None, &[]).unwrap();
+        let reparsed = parse(&serde_json::to_string_pretty(&exported).unwrap()).unwrap();
+        let restored = db::open_in_memory(false).unwrap();
+        assert_eq!(import(&restored, &reparsed, "skip").unwrap().added, 4);
+        let restored_pack = export(&restored, source.package.clone(), None, &[]).unwrap();
+        for original in &exported.recipes {
+            let roundtrip = restored_pack
+                .recipes
+                .iter()
+                .find(|recipe| recipe.id == original.id)
+                .unwrap();
+            assert_eq!(roundtrip.title, original.title);
+            assert_eq!(roundtrip.category, original.category);
+            assert_eq!(roundtrip.mode, original.mode);
+            assert_eq!(roundtrip.content, original.content);
+            assert_eq!(roundtrip.commands, original.commands);
+            assert_eq!(roundtrip.tags, original.tags);
+            assert_eq!(roundtrip.aliases, original.aliases);
         }
     }
 }

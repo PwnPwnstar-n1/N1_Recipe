@@ -1,6 +1,7 @@
 pub mod backup;
 pub mod commands;
 pub mod db;
+pub mod diagnostics;
 pub mod models;
 pub mod recipe_pack;
 mod repo;
@@ -36,7 +37,9 @@ pub fn run() {
         // Second launch -> notify the running instance and restore its main
         // window; the second process exits before opening the database.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            let _ = windows::show_main_window(app);
+            if let Err(error) = windows::show_main_window(app) {
+                diagnostics::log(app, &format!("main restore error={error}"));
+            }
         }))
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
@@ -48,14 +51,17 @@ pub fn run() {
 
             let settings =
                 settings::load(&settings::app_settings_path(app.handle())?).unwrap_or_default();
-            eprintln!(
-                "N1_Recipe startup: version={} mode={}",
-                env!("CARGO_PKG_VERSION"),
-                if tray::started_via_autostart() {
-                    "autostart"
-                } else {
-                    "manual"
-                }
+            diagnostics::log(
+                app.handle(),
+                &format!(
+                    "app startup version={} mode={}",
+                    env!("CARGO_PKG_VERSION"),
+                    if tray::started_via_autostart() {
+                        "autostart"
+                    } else {
+                        "manual"
+                    }
+                ),
             );
 
             // Windows are created ONCE and only show/hide at runtime (never
@@ -92,13 +98,18 @@ pub fn run() {
             if settings.launcher.enabled {
                 match shortcut::register_shortcut(app.handle(), &settings.launcher.shortcut) {
                     Ok(()) => {
-                        let _ = shortcut::set_registered_shortcut(
+                        if let Err(error) = shortcut::set_registered_shortcut(
                             app.handle(),
                             Some(settings.launcher.shortcut.clone()),
-                        );
+                        ) {
+                            diagnostics::log(
+                                app.handle(),
+                                &format!("shortcut state error={error}"),
+                            );
+                        }
                     }
                     Err(e) => {
-                        eprintln!("N1_Recipe: failed to register launcher shortcut: {e}");
+                        diagnostics::log(app.handle(), &format!("shortcut register error={e}"));
                     }
                 }
             }
@@ -117,17 +128,37 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
-            // Close-to-tray: the main window's X hides instead of quitting.
-            if window.label() == windows::roles::MAIN {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    let quitting = window.app_handle().state::<QuitState>();
-                    if !quitting.0.load(Ordering::SeqCst) {
-                        api.prevent_close();
-                        let _ = window.hide();
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                let quitting = window
+                    .app_handle()
+                    .state::<QuitState>()
+                    .0
+                    .load(Ordering::SeqCst);
+                if windows::close_disposition(window.label(), quitting)
+                    == windows::CloseDisposition::Hide
+                {
+                    api.prevent_close();
+                    diagnostics::log(
+                        window.app_handle(),
+                        &format!(
+                            "window close requested label={} action=hide",
+                            window.label()
+                        ),
+                    );
+                    if let Err(error) = window.hide() {
+                        diagnostics::log(
+                            window.app_handle(),
+                            &format!("window hide error label={} error={error}", window.label()),
+                        );
                     }
                 }
             }
+            tauri::WindowEvent::Destroyed => diagnostics::log(
+                window.app_handle(),
+                &format!("window destroyed label={}", window.label()),
+            ),
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_snippets,

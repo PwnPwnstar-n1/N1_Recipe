@@ -6,6 +6,8 @@ import {
   cancelVariableDialog,
   confirmVariableDialog,
   executeSelected,
+  executeCommandGroupAll,
+  executeCommandStep,
   hideLauncher,
   launcher,
   moveSelection,
@@ -113,6 +115,20 @@ watch(
 
     <div v-if="launcher.copied" class="status">{{ t("launcher.copied") }}</div>
     <div v-if="launcher.error" class="error">{{ launcher.error }}</div>
+
+    <section v-if="launcher.results[launcher.selectedIndex]?.kind === 'COMMAND_GROUP'" class="command-group">
+      <h2>{{ launcher.results[launcher.selectedIndex].title }}</h2>
+      <div
+        v-for="(command, index) in launcher.results[launcher.selectedIndex].commands"
+        :key="index"
+        class="command-step"
+      >
+        <strong>STEP {{ index + 1 }}</strong>
+        <code>{{ command }}</code>
+        <button @click="executeCommandStep(launcher.results[launcher.selectedIndex], command)">复制</button>
+      </div>
+      <button class="copy-all" @click="executeCommandGroupAll(launcher.results[launcher.selectedIndex])">复制全部</button>
+    </section>
 
     <TemplateVariableDialog
       v-if="launcher.variableDialog"
@@ -244,6 +260,21 @@ watch(
   font-size: 12px;
   text-align: center;
 }
+
+.command-group {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.command-group h2 { margin: 0 0 8px; font-size: 14px; color: var(--text-bright); }
+.command-step { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 8px 0; border-top: 1px solid var(--border); }
+.command-step strong { color: var(--text-faint); font-size: 10px; padding-top: 5px; }
+.command-step code { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; color: var(--text); font-family: var(--mono); }
+.command-step button, .copy-all { border: 1px solid var(--border); border-radius: 5px; background: var(--bg-hover); color: var(--accent); padding: 4px 9px; cursor: pointer; }
+.copy-all { width: 100%; margin-top: 6px; padding: 7px; }
 
 .status {
   color: var(--accent);

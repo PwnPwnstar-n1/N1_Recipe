@@ -85,13 +85,20 @@ fn toggle_dock<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
     match id {
         menu_id::OPEN => {
-            let _ = windows::show_main_window(app);
+            if let Err(error) = windows::show_main_window(app) {
+                crate::diagnostics::log(app, &format!("tray main show error={error}"));
+            }
         }
         menu_id::LAUNCHER => {
-            let _ = windows::show_launcher_window(app);
+            crate::diagnostics::log(app, "tray quick window requested");
+            if let Err(error) = windows::show_launcher_window(app) {
+                crate::diagnostics::log(app, &format!("tray quick window show error={error}"));
+            }
         }
         menu_id::DOCK_TOGGLE => {
-            let _ = toggle_dock(app);
+            if let Err(error) = toggle_dock(app) {
+                crate::diagnostics::log(app, &format!("tray dock toggle error={error}"));
+            }
         }
         menu_id::QUIT => {
             // Set the quit flag FIRST so the close-to-tray handler lets every
@@ -127,7 +134,12 @@ pub fn create_tray<R: Runtime>(
                 ..
             } = event
             {
-                let _ = windows::show_main_window(tray.app_handle());
+                if let Err(error) = windows::show_main_window(tray.app_handle()) {
+                    crate::diagnostics::log(
+                        tray.app_handle(),
+                        &format!("tray click main show error={error}"),
+                    );
+                }
             }
         });
 

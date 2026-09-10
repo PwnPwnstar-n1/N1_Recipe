@@ -29,6 +29,8 @@ fn setup() -> (MockApp, MockWebview) {
             commands::toggle_favorite,
             commands::copy_snippet,
             commands::list_variables,
+            commands::list_text_variables,
+            commands::copy_template_text,
             commands::list_categories,
             commands::get_settings,
             commands::set_language,
@@ -37,6 +39,9 @@ fn setup() -> (MockApp, MockWebview) {
             commands::apply_dock_settings,
             commands::expand_dock,
             commands::collapse_dock,
+            commands::preview_recipe_pack,
+            commands::import_recipe_pack,
+            commands::export_recipe_pack,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build mock app");
@@ -437,6 +442,145 @@ fn template_dialog_cancel_contract_no_copy_invocation() {
     let snippet = invoke(&webview, "get_snippet", json!({ "id": id })).expect("get failed");
     assert_eq!(snippet["usageCount"], 0);
     assert!(snippet["lastUsedAt"].is_null());
+}
+
+#[test]
+fn command_group_step_and_copy_all_via_ipc() {
+    let _clipboard_guard = CLIPBOARD_LOCK.lock().unwrap();
+    let (app, webview) = setup();
+    let created = invoke(
+        &webview,
+        "create_snippet",
+        json!({ "input": {
+            "title": "Pwn ELF 初始化",
+            "content": "",
+            "type": "COMMAND",
+            "category": "Pwn",
+            "language": "shell",
+            "tags": ["中文标签"],
+            "aliases": [],
+            "kind": "COMMAND_GROUP",
+            "commands": ["file {{binary}}", "echo ready", "rizin -A {{binary}}"]
+        }}),
+    )
+    .unwrap();
+    let id = created["id"].as_i64().unwrap();
+
+    let step_variables = invoke(
+        &webview,
+        "list_text_variables",
+        json!({ "text": "file {{binary}}" }),
+    )
+    .unwrap();
+    assert_eq!(step_variables, json!(["binary"]));
+    let no_variables = invoke(
+        &webview,
+        "list_text_variables",
+        json!({ "text": "echo ready" }),
+    )
+    .unwrap();
+    assert_eq!(no_variables, json!([]));
+
+    let all = "file {{binary}}\necho ready\nrizin -A {{binary}}";
+    let all_variables = invoke(&webview, "list_text_variables", json!({ "text": all })).unwrap();
+    assert_eq!(all_variables, json!(["binary"]));
+    let literal = r#"C:\实验室\a $1 \ "quoted".exe"#;
+    let rendered = invoke(
+        &webview,
+        "copy_template_text",
+        json!({ "text": all, "values": { "binary": literal }, "snippetId": id }),
+    )
+    .unwrap();
+    assert_eq!(
+        rendered.as_str().unwrap(),
+        format!("file {literal}\necho ready\nrizin -A {literal}")
+    );
+    assert_eq!(
+        app.clipboard().read_text().unwrap(),
+        rendered.as_str().unwrap()
+    );
+}
+
+fn package_meta() -> Value {
+    json!({
+        "id": "local.ipc-test",
+        "name": "IPC 测试包",
+        "version": "1.0.0",
+        "description": "",
+        "author": "test",
+        "homepage": "",
+        "license": "",
+        "tags": ["测试"],
+        "minimumAppVersion": "0.2.1",
+        "exportedAt": "2026-09-10T00:00:00Z"
+    })
+}
+
+#[test]
+fn exact_recipe_export_file_previews_and_reimports_via_ipc() {
+    let (_app, webview) = setup();
+    let first = invoke(
+        &webview,
+        "create_snippet",
+        json!({ "input": sample_input() }),
+    )
+    .unwrap();
+    let id = first["id"].as_i64().unwrap();
+    let path = std::env::temp_dir().join(format!(
+        "n1-recipe-ipc-{}-{}.n1recipe.json",
+        std::process::id(),
+        crate::std_time_marker()
+    ));
+    let path_text = path.to_string_lossy().to_string();
+
+    let count = invoke(
+        &webview,
+        "export_recipe_pack",
+        json!({ "path": path_text, "package": package_meta(), "category": null, "ids": [id] }),
+    )
+    .unwrap();
+    assert_eq!(count, 1);
+    let raw = std::fs::read_to_string(&path).unwrap();
+    assert!(raw.contains("n1-recipe-pack"));
+    let preview = invoke(
+        &webview,
+        "preview_recipe_pack",
+        json!({ "path": path.to_string_lossy() }),
+    )
+    .unwrap();
+    assert_eq!(preview["recipeCount"], 1);
+    let imported = invoke(
+        &webview,
+        "import_recipe_pack",
+        json!({ "path": path.to_string_lossy(), "strategy": "duplicate" }),
+    )
+    .unwrap();
+    assert_eq!(imported["added"], 1);
+    std::fs::remove_file(path).unwrap();
+}
+
+fn std_time_marker() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+}
+
+#[test]
+fn export_rejects_an_empty_resolved_selection() {
+    let (_app, webview) = setup();
+    let path = std::env::temp_dir().join(format!(
+        "n1-recipe-empty-{}-{}.n1recipe.json",
+        std::process::id(),
+        std_time_marker()
+    ));
+    let result = invoke(
+        &webview,
+        "export_recipe_pack",
+        json!({ "path": path.to_string_lossy(), "package": package_meta(), "category": null, "ids": [999999] }),
+    );
+    assert!(result.unwrap_err().contains("至少选择一个配方"));
+    assert!(!path.exists());
 }
 
 // ---------------------------------------------------------------------------

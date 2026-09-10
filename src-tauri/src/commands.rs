@@ -521,6 +521,9 @@ pub fn export_recipe_pack(
 ) -> CmdResult<u32> {
     let conn = db.0.lock().map_err(map_err)?;
     let pack = crate::recipe_pack::export(&conn, package, category.as_deref(), &ids)?;
+    if pack.recipes.is_empty() {
+        return Err("至少选择一个配方".to_string());
+    }
     let count = pack.recipes.len() as u32;
     std::fs::write(path, serde_json::to_string_pretty(&pack).map_err(map_err)?)
         .map_err(|_| "无法写入配方包文件".to_string())?;

@@ -7,6 +7,7 @@ export interface LauncherVariableDialog {
   id: number;
   title: string;
   variables: string[];
+  text?: string;
 }
 
 /// Launcher-window state. Deliberately separate from the main window store:
@@ -87,8 +88,8 @@ export function resetLauncher(): void {
 export async function hideLauncher(): Promise<void> {
   try {
     await api.hideLauncher();
-  } catch {
-    // window already gone / command unavailable — nothing to recover
+  } catch (err) {
+    launcher.error = localizeError(err);
   }
 }
 
@@ -108,12 +109,45 @@ async function performCopy(id: number, values: Record<string, string>): Promise<
   return res.text;
 }
 
+async function performTextCopy(
+  snippet: Snippet,
+  text: string,
+  values: Record<string, string>,
+): Promise<string> {
+  return api.copyTemplateText(text, values, snippet.id);
+}
+
+/** Copy one command step, asking only for variables used by that step. */
+export async function executeCommandStep(snippet: Snippet, text: string): Promise<void> {
+  try {
+    const variables = await api.listTextVariables(text);
+    if (variables.length > 0) {
+      launcher.variableDialog = { id: snippet.id, title: snippet.title, variables, text };
+      launcher.error = "";
+      return;
+    }
+    await performTextCopy(snippet, text, {});
+    finishCopy();
+  } catch (err) {
+    launcher.error = localizeError(err);
+  }
+}
+
+/** Copy a whole command group using the established newline-separated format. */
+export async function executeCommandGroupAll(snippet: Snippet): Promise<void> {
+  await executeCommandStep(snippet, snippet.commands.join("\n"));
+}
+
 /// Enter on a result: template snippets open the variable dialog; plain and
 /// system-variable snippets copy immediately (backend renders system vars at
 /// copy time). usage_count only increments on a successful clipboard write.
 export async function executeSelected(): Promise<void> {
   const snippet = selectedResult();
   if (!snippet) return; // Enter with no results does nothing
+  if (snippet.kind === "COMMAND_GROUP") {
+    await executeCommandGroupAll(snippet);
+    return;
+  }
   try {
     const variables = await api.listVariables(snippet.id);
     if (variables.length > 0) {
@@ -140,7 +174,13 @@ export async function confirmVariableDialog(
   // close immediately so a double Enter cannot copy twice; restore on error
   launcher.variableDialog = null;
   try {
-    await performCopy(dialog.id, values);
+    if (dialog.text !== undefined) {
+      const snippet = launcher.results.find((item) => item.id === dialog.id);
+      if (!snippet) throw new Error("selected recipe is no longer available");
+      await performTextCopy(snippet, dialog.text, values);
+    } else {
+      await performCopy(dialog.id, values);
+    }
     finishCopy();
   } catch (err) {
     // clipboard/render failure: stay visible, show the error, never count

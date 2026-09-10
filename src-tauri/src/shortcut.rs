@@ -20,19 +20,42 @@ pub struct ShortcutManager {
 /// would register the same hotkey twice — the second attempt fails and the
 /// first registration leaks. `on_shortcut` alone is the single atomic step.
 pub fn register_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut: &str) -> Result<(), String> {
-    app.global_shortcut()
+    crate::diagnostics::log(app, "shortcut register begin");
+    let result = app
+        .global_shortcut()
         .on_shortcut(shortcut, |app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
-                let _ = windows::toggle_launcher_window(app);
+                crate::diagnostics::log(app, "shortcut triggered state=pressed");
+                if let Err(error) = windows::toggle_launcher_window(app) {
+                    crate::diagnostics::log(app, &format!("shortcut toggle error={error}"));
+                }
             }
         })
-        .map_err(|e| format!("failed to register shortcut: {e}"))?;
-    Ok(())
+        .map_err(|e| format!("failed to register shortcut: {e}"));
+    match result {
+        Ok(()) => {
+            crate::diagnostics::log(app, "shortcut register result=ok");
+            Ok(())
+        }
+        Err(error) => {
+            crate::diagnostics::log(
+                app,
+                &format!("shortcut register result=error error={error}"),
+            );
+            Err(error)
+        }
+    }
 }
 
 /// Remove a shortcut registration (best effort — never fatal).
 pub fn unregister_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut: &str) {
-    let _ = app.global_shortcut().unregister(shortcut);
+    match app.global_shortcut().unregister(shortcut) {
+        Ok(()) => crate::diagnostics::log(app, "shortcut unregister result=ok"),
+        Err(error) => crate::diagnostics::log(
+            app,
+            &format!("shortcut unregister result=error error={error}"),
+        ),
+    }
 }
 
 /// Read the currently registered shortcut from the managed state.

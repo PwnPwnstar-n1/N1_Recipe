@@ -22,6 +22,8 @@ commands, curl / HTTP templates and more. All data stays on your machine.
 - Unicode template variables such as `{{文章路径}}` and `{{项目 名称}}`
 - Light, dark and system themes plus four readable font sizes
 - Resizable quick launcher with per-window geometry restoration
+- Recipe-pack export by category or exact recipe selection
+- Quick Launcher Command Groups with per-step copy and Copy All
 
 ## v0.1.1 data compatibility
 
@@ -43,8 +45,19 @@ opens / closes the Quick Launcher.
 ```
 %APPDATA%\com.snipdeck.app\
 ├── snipdeck.db     # your snippets (SQLite)
-└── settings.json   # language / launcher / dock / startup
+├── settings.json   # language / launcher / dock / startup
+└── n1-recipe.log   # privacy-safe local lifecycle diagnostics
 ```
+
+The diagnostic log records window and shortcut lifecycle events only. It does
+not contain recipe text, template values, clipboard contents, or search text.
+
+## Recipe export
+
+The in-app export dialog supports whole-category selection and exact recipe
+checkboxes, including partial category states. It writes the compatible
+`n1-recipe-pack` format version 1 (`.n1recipe.json`) and never includes Scratch,
+settings, usage statistics, favorites, or Dock state.
 
 ## Quitting
 

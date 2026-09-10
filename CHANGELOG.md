@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.2.1 - 2026-09-08
+## 0.2.1 - 2026-09-10
+
+### Added / Improved
+
+- Added an in-app recipe export selector with category, per-recipe, select-all, clear-all, and indeterminate checkbox states. The existing `n1-recipe-pack` format remains unchanged.
+- Added complete Command Group support to the Quick Launcher, including per-step copy and newline-separated Copy All with deduplicated Unicode template variables.
+- Added privacy-safe local diagnostics for shortcut registration, shortcut triggers, quick-window creation, visibility, focus, close, hide, destruction, and errors.
+
+### Fixed
+
+- Fixed the Quick Launcher being destroyed by its close button, which left the still-registered global shortcut targeting a missing window on affected Windows machines.
+- Hardened shortcut and quick-window lifecycle error handling so failures are recorded instead of silently discarded.
 
 - Fixed the main window being restored as a tiny transparent Dock-like strip.
 - Kept main, Dock and launcher window roles and geometry state strictly isolated.
