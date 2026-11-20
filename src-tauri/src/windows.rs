@@ -381,6 +381,13 @@ pub fn show_launcher_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String
         error.to_string()
     })?;
     crate::diagnostics::log(app, "quick window focus result=ok");
+    crate::diagnostics::log(
+        app,
+        &format!(
+            "event=launcher_visibility_after_show visible={}",
+            window.is_visible().unwrap_or(false)
+        ),
+    );
     Ok(())
 }
 

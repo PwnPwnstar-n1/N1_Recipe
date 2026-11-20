@@ -303,28 +303,41 @@ pub fn update_launcher_settings<R: tauri::Runtime>(
     app: AppHandle<R>,
     launcher: settings::LauncherSettings,
 ) -> CmdResult<Settings> {
-    settings::validate_shortcut(&launcher.shortcut)?;
-    let old = crate::shortcut::registered_shortcut(&app)?;
-
-    if launcher.enabled && old.as_deref() != Some(launcher.shortcut.as_str()) {
-        crate::shortcut::register_shortcut(&app, &launcher.shortcut)?;
-    }
-
+    settings::validate_launcher(&launcher)?;
     let path = settings::app_settings_path(&app)?;
     let mut current = settings::load(&path)?;
     current.launcher = launcher.clone();
-    settings::save(&path, &current)?;
-
-    if let Some(old) = old {
-        if old != launcher.shortcut {
-            crate::shortcut::unregister_shortcut(&app, &old);
-        }
-    }
-    crate::shortcut::set_registered_shortcut(
-        &app,
-        launcher.enabled.then(|| launcher.shortcut.clone()),
-    )?;
+    crate::shortcut::replace_keyboard_bindings(&app, &launcher, || {
+        settings::save(&path, &current)
+    })?;
+    crate::mouse_hook::configure(&app, &launcher.mouse);
     Ok(current)
+}
+
+#[tauri::command]
+pub fn get_shortcut_diagnostics<R: tauri::Runtime>(
+    app: AppHandle<R>,
+) -> CmdResult<crate::shortcut::ShortcutDiagnostics> {
+    crate::shortcut::diagnostics(&app)
+}
+
+#[tauri::command]
+pub fn reregister_shortcuts<R: tauri::Runtime>(
+    app: AppHandle<R>,
+) -> CmdResult<crate::shortcut::ShortcutDiagnostics> {
+    let current = settings::load(&settings::app_settings_path(&app)?)?;
+    let result = crate::shortcut::register_configured(&app, &current.launcher, true);
+    crate::mouse_hook::configure(&app, &current.launcher.mouse);
+    result?;
+    crate::shortcut::diagnostics(&app)
+}
+
+#[tauri::command]
+pub fn test_launcher<R: tauri::Runtime>(
+    app: AppHandle<R>,
+) -> CmdResult<crate::shortcut::ShortcutDiagnostics> {
+    crate::shortcut::activate_launcher(&app, "settings:test", false);
+    crate::shortcut::diagnostics(&app)
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +347,8 @@ pub fn update_launcher_settings<R: tauri::Runtime>(
 
 #[tauri::command]
 pub fn show_launcher<R: tauri::Runtime>(app: AppHandle<R>) -> CmdResult<()> {
-    crate::windows::show_launcher_window(&app)
+    crate::shortcut::activate_launcher(&app, "settings:open", false);
+    Ok(())
 }
 
 #[tauri::command]

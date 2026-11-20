@@ -87,10 +87,7 @@ export async function changeLanguage(locale: AppLocale): Promise<void> {
 /// Atomically update the launcher shortcut settings. Returns null on
 /// success or a localized error string on failure — on failure the backend
 /// has kept the old registration and settings untouched.
-export async function updateLauncherSettings(patch: {
-  enabled: boolean;
-  shortcut: string;
-}): Promise<string | null> {
+export async function updateLauncherSettings(patch: api.Settings["launcher"]): Promise<string | null> {
   try {
     const saved = await api.updateLauncherSettings(patch);
     store.settings = saved;

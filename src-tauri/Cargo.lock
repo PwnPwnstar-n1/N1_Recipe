@@ -2285,7 +2285,7 @@ dependencies = [
 
 [[package]]
 name = "n1_recipe"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "embed-resource",
@@ -2299,6 +2299,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-single-instance",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

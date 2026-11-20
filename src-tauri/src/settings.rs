@@ -32,6 +32,37 @@ pub struct LauncherSettings {
     pub enabled: bool,
     /// Accelerator string, e.g. "Ctrl+Alt+Space".
     pub shortcut: String,
+    /// Optional second keyboard registration. It is independent from the
+    /// primary binding so one conflicting accelerator is not a single point
+    /// of failure.
+    pub secondary_enabled: bool,
+    pub secondary_shortcut: String,
+    /// Optional Windows XButton binding (implemented by the native mouse
+    /// hook, not by RegisterHotKey).
+    pub mouse: MouseBindingSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MouseBindingSettings {
+    pub enabled: bool,
+    /// "XButton1" | "XButton2".
+    pub button: String,
+    /// Canonical `+` separated modifier list, or an empty string.
+    pub modifiers: String,
+    /// When true only the exactly matched XButton down event is consumed.
+    pub consume: bool,
+}
+
+impl Default for MouseBindingSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            button: "XButton1".into(),
+            modifiers: String::new(),
+            consume: false,
+        }
+    }
 }
 
 impl Default for LauncherSettings {
@@ -39,6 +70,9 @@ impl Default for LauncherSettings {
         Self {
             enabled: true,
             shortcut: "Ctrl+Alt+Space".into(),
+            secondary_enabled: false,
+            secondary_shortcut: "Ctrl+Alt+F12".into(),
+            mouse: MouseBindingSettings::default(),
         }
     }
 }
@@ -127,7 +161,7 @@ pub fn validate_dock(dock: &DockSettings) -> Result<(), String> {
 pub const SUPPORTED_LANGUAGES: [&str; 2] = ["zh-CN", "en-US"];
 
 /// Modifier tokens accepted in a shortcut accelerator.
-const MODIFIERS: [&str; 4] = ["Ctrl", "Alt", "Shift", "Super"];
+const MODIFIERS: [&str; 5] = ["Ctrl", "Alt", "Shift", "Super", "Win"];
 
 /// Validate a shortcut accelerator of the form `Modifier(+Modifier)*+Key`
 /// with exactly one non-modifier key. Called before attempting OS
@@ -150,9 +184,18 @@ pub fn validate_shortcut(shortcut: &str) -> Result<(), String> {
 
     let mut has_modifier = false;
     let mut key_count = 0;
+    let mut seen_modifiers = std::collections::HashSet::new();
     for token in &tokens {
         if MODIFIERS.contains(token) {
             has_modifier = true;
+            let canonical = if matches!(*token, "Super" | "Win") {
+                "Win"
+            } else {
+                *token
+            };
+            if !seen_modifiers.insert(canonical) {
+                return Err(format!("duplicate shortcut modifier: {token:?}"));
+            }
         } else {
             key_count += 1;
             if !is_valid_key(token) {
@@ -209,7 +252,53 @@ fn is_valid_key(token: &str) -> bool {
             | "F10"
             | "F11"
             | "F12"
+            | "F13"
+            | "F14"
+            | "F15"
+            | "F16"
+            | "F17"
+            | "F18"
+            | "F19"
+            | "F20"
+            | "F21"
+            | "F22"
+            | "F23"
+            | "F24"
+            | "Insert"
+            | "Pause"
+            | "PrintScreen"
     )
+}
+
+pub fn validate_launcher(launcher: &LauncherSettings) -> Result<(), String> {
+    if launcher.enabled {
+        validate_shortcut(&launcher.shortcut)?;
+    }
+    if launcher.secondary_enabled {
+        validate_shortcut(&launcher.secondary_shortcut)?;
+        if launcher.enabled && launcher.shortcut == launcher.secondary_shortcut {
+            return Err("primary and secondary shortcuts must be different".into());
+        }
+    }
+    validate_mouse_binding(&launcher.mouse)
+}
+
+pub fn validate_mouse_binding(mouse: &MouseBindingSettings) -> Result<(), String> {
+    if !matches!(mouse.button.as_str(), "XButton1" | "XButton2") {
+        return Err(format!("unsupported mouse button: {:?}", mouse.button));
+    }
+    if !mouse.modifiers.is_empty() {
+        let mut seen = std::collections::HashSet::new();
+        for modifier in mouse.modifiers.split('+') {
+            if !matches!(modifier, "Ctrl" | "Alt" | "Shift" | "Win") {
+                return Err(format!("unsupported mouse modifier: {modifier:?}"));
+            }
+            if !seen.insert(modifier) {
+                return Err(format!("duplicate mouse modifier: {modifier:?}"));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Load settings from `path`; missing file yields defaults.
@@ -276,6 +365,7 @@ mod tests {
             launcher: LauncherSettings {
                 enabled: true,
                 shortcut: "Ctrl+Shift+Space".into(),
+                ..LauncherSettings::default()
             },
             ..Default::default()
         };
@@ -309,6 +399,8 @@ mod tests {
         let loaded = load(&path).unwrap();
         assert!(!loaded.launcher.enabled);
         assert_eq!(loaded.launcher.shortcut, "Ctrl+Alt+Space");
+        assert!(!loaded.launcher.secondary_enabled);
+        assert!(!loaded.launcher.mouse.enabled);
         let _ = std::fs::remove_file(&path);
     }
 
@@ -338,6 +430,8 @@ mod tests {
             "Ctrl+F9",
             "Ctrl+Alt+P",
             "Super+Shift+X",
+            "Win+F24",
+            "Ctrl+PrintScreen",
         ] {
             assert!(validate_shortcut(valid).is_ok(), "{valid} should be valid");
         }
@@ -357,6 +451,8 @@ mod tests {
             "Ctrl+NoSuchKey",
             "Foo+Bar",
             "ctrl+alt+space", // case-sensitive token names
+            "Ctrl+Ctrl+P",
+            "Win+Super+P",
         ] {
             assert!(
                 validate_shortcut(invalid).is_err(),

@@ -22,6 +22,12 @@ src-tauri/target
 dist-ssr
 *.local
 
+# Local validation and user data (never publish)
+local-validation-backups/
+local-validation-install/
+test_exe/
+配方/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.3 - 2026-11-20
+
+### Added / Improved
+
+- Added independently configurable primary and backup global shortcuts with explicit registration diagnostics.
+- Added Windows Mouse XButton1/XButton2 bindings, optional modifier combinations, and an opt-in matched-event consume mode.
+- Expanded validated keyboard support through F24, navigation keys, Insert, Pause, Print Screen, and Windows-key combinations.
+- Added shortcut recording, Launcher testing, manual re-registration, and separate input/display health indicators.
+- Unified keyboard, mouse, tray, and Settings activation through one persistent Launcher service.
+
+### Fixed
+
+- Preserved the working shortcut and saved settings when a replacement shortcut fails to register.
+- Added bounded 2/5/15-second recovery attempts for missing registrations without repeatedly churning healthy shortcuts.
+- Fixed duplicate XButton delivery toggling Launcher twice with matched-event debouncing.
+- Fixed preserved mouse events immediately stealing focus back after Launcher activation.
+- Improved privacy-safe diagnostics for registration conflicts, input receipt, window display, focus, and latency.
+
+### Compatibility / Known Limitations
+
+- Retains `com.snipdeck.app`, `snipdeck.db`, existing Recipes, categories, and legacy `launcher.shortcut` settings.
+- Windows cannot override another application or the system when a global shortcut is already registered.
+- Physical gaming-mouse drivers, UAC secure desktop, RDP, sleep/resume, and all multi-display/DPI combinations are not comprehensively verified.
+
 ## 0.2.2 - 2026-09-10
 
 ### Added / Improved

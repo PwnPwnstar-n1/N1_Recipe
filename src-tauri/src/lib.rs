@@ -3,6 +3,7 @@ pub mod commands;
 pub mod db;
 pub mod diagnostics;
 pub mod models;
+pub mod mouse_hook;
 pub mod recipe_pack;
 mod repo;
 mod seed;
@@ -91,27 +92,30 @@ pub fn run() {
                 settings.dock.enabled,
             )?;
 
-            // Global shortcut lifecycle: register once at startup from the
-            // persisted settings. Registration failure must NOT prevent the
-            // app from starting — the launcher stays usable via the tray and
-            // the Settings "Open Launcher" button.
-            if settings.launcher.enabled {
-                match shortcut::register_shortcut(app.handle(), &settings.launcher.shortcut) {
-                    Ok(()) => {
-                        if let Err(error) = shortcut::set_registered_shortcut(
-                            app.handle(),
-                            Some(settings.launcher.shortcut.clone()),
-                        ) {
-                            diagnostics::log(
-                                app.handle(),
-                                &format!("shortcut state error={error}"),
-                            );
+            // Keyboard registration failures never prevent startup. Missing
+            // bindings receive only three bounded, backed-off retries.
+            let registration =
+                shortcut::register_configured(app.handle(), &settings.launcher, false);
+            mouse_hook::configure(app.handle(), &settings.launcher.mouse);
+            if let Err(error) = mouse_hook::start(app.handle().clone()) {
+                diagnostics::log(
+                    app.handle(),
+                    &format!("event=mouse_hook_start result=error error={error}"),
+                );
+            }
+            if registration.is_err() {
+                let recovery_app = app.handle().clone();
+                std::thread::spawn(move || {
+                    for delay in [2_u64, 5, 15] {
+                        std::thread::sleep(std::time::Duration::from_secs(delay));
+                        let current = settings::app_settings_path(&recovery_app)
+                            .and_then(|path| settings::load(&path));
+                        let Ok(current) = current else { break };
+                        if shortcut::retry_missing(&recovery_app, &current.launcher).is_ok() {
+                            break;
                         }
                     }
-                    Err(e) => {
-                        diagnostics::log(app.handle(), &format!("shortcut register error={e}"));
-                    }
-                }
+                });
             }
 
             // Autostart reconciliation: settings.json is the single source of
@@ -186,6 +190,9 @@ pub fn run() {
             commands::get_settings,
             commands::set_language,
             commands::update_launcher_settings,
+            commands::get_shortcut_diagnostics,
+            commands::reregister_shortcuts,
+            commands::test_launcher,
             commands::show_launcher,
             commands::hide_launcher,
             commands::apply_dock_settings,

@@ -90,10 +90,7 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
             }
         }
         menu_id::LAUNCHER => {
-            crate::diagnostics::log(app, "tray quick window requested");
-            if let Err(error) = windows::show_launcher_window(app) {
-                crate::diagnostics::log(app, &format!("tray quick window show error={error}"));
-            }
+            crate::shortcut::activate_launcher(app, "tray", false);
         }
         menu_id::DOCK_TOGGLE => {
             if let Err(error) = toggle_dock(app) {
@@ -106,6 +103,7 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
             if let Some(quitting) = app.try_state::<crate::QuitState>() {
                 quitting.0.store(true, Ordering::SeqCst);
             }
+            crate::mouse_hook::shutdown();
             app.exit(0);
         }
         _ => {}

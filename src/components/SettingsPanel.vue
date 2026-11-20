@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import * as api from "../api";
@@ -33,8 +33,18 @@ function onChangeLanguage(e: Event): void {
 // Shortcut draft: local copy so typing is not clobbered by store updates;
 // committed on Enter/blur. On failure the draft reverts to the stored value.
 const shortcutDraft = ref("Ctrl+Alt+Space");
+const secondaryDraft = ref("Ctrl+Alt+F12");
 const shortcutFeedback = ref("");
 const shortcutIsError = ref(false);
+const shortcutDiagnostics = ref<api.ShortcutDiagnostics | null>(null);
+
+function currentLauncher(): api.Settings["launcher"] {
+  return store.settings?.launcher ?? {
+    enabled: true, shortcut: "Ctrl+Alt+Space", secondaryEnabled: false,
+    secondaryShortcut: "Ctrl+Alt+F12",
+    mouse: { enabled: false, button: "XButton1", modifiers: "", consume: false },
+  };
+}
 
 watch(
   () => store.settings?.launcher.shortcut,
@@ -43,42 +53,73 @@ watch(
   },
   { immediate: true },
 );
+watch(() => store.settings?.launcher.secondaryShortcut, value => {
+  if (value !== undefined) secondaryDraft.value = value;
+}, { immediate: true });
+
+async function refreshDiagnostics(): Promise<void> {
+  try { shortcutDiagnostics.value = await api.getShortcutDiagnostics(); } catch { /* app may be closing */ }
+}
+let diagnosticTimer: number | undefined;
+onMounted(() => { void refreshDiagnostics(); diagnosticTimer = window.setInterval(refreshDiagnostics, 2000); });
+onUnmounted(() => { if (diagnosticTimer !== undefined) window.clearInterval(diagnosticTimer); });
+
+async function commitLauncher(patch: Partial<api.Settings["launcher"]>): Promise<boolean> {
+  const error = await updateLauncherSettings({ ...currentLauncher(), ...patch });
+  if (error !== null) { shortcutFeedback.value = error; shortcutIsError.value = true; return false; }
+  shortcutFeedback.value = t("settings.shortcutSaved"); shortcutIsError.value = false;
+  await refreshDiagnostics(); return true;
+}
 
 async function commitShortcut(): Promise<void> {
   const current = store.settings?.launcher.shortcut ?? "Ctrl+Alt+Space";
-  const enabled = store.settings?.launcher.enabled ?? true;
   if (shortcutDraft.value === current) {
     shortcutFeedback.value = "";
     shortcutIsError.value = false;
     return;
   }
-  const error = await updateLauncherSettings({
-    enabled,
-    shortcut: shortcutDraft.value,
-  });
-  if (error !== null) {
-    shortcutFeedback.value = error;
-    shortcutIsError.value = true;
+  if (!(await commitLauncher({ shortcut: shortcutDraft.value }))) {
     shortcutDraft.value = current; // revert — the old shortcut is still active
-  } else {
-    shortcutFeedback.value = t("settings.shortcutSaved");
-    shortcutIsError.value = false;
   }
+}
+
+async function commitSecondary(): Promise<void> {
+  const current = currentLauncher().secondaryShortcut;
+  if (secondaryDraft.value === current) return;
+  if (!(await commitLauncher({ secondaryShortcut: secondaryDraft.value }))) secondaryDraft.value = current;
 }
 
 async function onToggleEnabled(e: Event): Promise<void> {
   const target = e.target as HTMLInputElement;
   const enabled = target.checked;
-  const shortcut = store.settings?.launcher.shortcut ?? "Ctrl+Alt+Space";
-  const error = await updateLauncherSettings({ enabled, shortcut });
-  if (error !== null) {
-    shortcutFeedback.value = error;
-    shortcutIsError.value = true;
+  if (!(await commitLauncher({ enabled }))) {
     target.checked = !enabled; // revert UI — backend kept the old state
-  } else {
-    shortcutFeedback.value = "";
-    shortcutIsError.value = false;
   }
+}
+
+
+function recordedKey(event: KeyboardEvent): string | null {
+  if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) return null;
+  const names: Record<string,string> = { " ": "Space", Esc: "Escape", Up: "ArrowUp", Down: "ArrowDown", Left: "ArrowLeft", Right: "ArrowRight" };
+  let key = names[event.key] ?? event.key;
+  if (/^[a-z]$/i.test(key)) key = key.toUpperCase();
+  if (!(/^[A-Z0-9]$/.test(key) || /^F(?:[1-9]|1[0-9]|2[0-4])$/.test(key) || ["Space","Tab","Enter","Escape","Backspace","Delete","Insert","Home","End","PageUp","PageDown","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Pause","PrintScreen"].includes(key))) return null;
+  const modifiers = [event.ctrlKey && "Ctrl", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Win"].filter(Boolean);
+  return modifiers.length ? [...modifiers, key].join("+") : null;
+}
+
+function recordShortcut(event: KeyboardEvent, secondary = false): void {
+  event.preventDefault(); const value = recordedKey(event); if (!value) return;
+  if (secondary) { secondaryDraft.value = value; void commitSecondary(); }
+  else { shortcutDraft.value = value; void commitShortcut(); }
+}
+
+async function onReregister(): Promise<void> {
+  try { shortcutDiagnostics.value = await api.reregisterShortcuts(); shortcutFeedback.value = "重新注册成功"; shortcutIsError.value = false; }
+  catch (err) { shortcutFeedback.value = localizeError(err); shortcutIsError.value = true; await refreshDiagnostics(); }
+}
+async function onTestLauncher(): Promise<void> {
+  try { shortcutDiagnostics.value = await api.testLauncher(); } catch (err) { shortcutFeedback.value = localizeError(err); shortcutIsError.value = true; }
 }
 
 async function openLauncher(): Promise<void> {
@@ -248,22 +289,37 @@ async function onImport(): Promise<void> {
         <span>{{ t("settings.enableLauncher") }}</span>
       </label>
       <div class="shortcut-row">
-        <span class="shortcut-label">{{ t("settings.shortcut") }}</span>
+        <span class="shortcut-label">主快捷键</span>
         <input
           v-model="shortcutDraft"
           type="text"
+          readonly
           spellcheck="false"
           :placeholder="t('settings.shortcutPlaceholder')"
-          @keydown.enter="commitShortcut"
-          @blur="commitShortcut"
+          @keydown="recordShortcut($event)"
         />
       </div>
-      <button class="btn" @click="openLauncher">
-        {{ t("settings.openLauncher") }}
-      </button>
+      <label class="checkbox"><input type="checkbox" :checked="currentLauncher().secondaryEnabled" @change="commitLauncher({ secondaryEnabled: ($event.target as HTMLInputElement).checked })"/><span>启用备用快捷键</span></label>
+      <div class="shortcut-row"><span class="shortcut-label">备用快捷键</span><input v-model="secondaryDraft" type="text" readonly spellcheck="false" @keydown="recordShortcut($event, true)"/></div>
+      <label class="checkbox"><input type="checkbox" :checked="currentLauncher().mouse.enabled" @change="commitLauncher({ mouse: { ...currentLauncher().mouse, enabled: ($event.target as HTMLInputElement).checked } })"/><span>启用鼠标侧键</span></label>
+      <div class="appearance-row">
+        <select class="select" :value="currentLauncher().mouse.button" @change="commitLauncher({ mouse: { ...currentLauncher().mouse, button: ($event.target as HTMLSelectElement).value as 'XButton1'|'XButton2' } })"><option value="XButton1">Mouse XButton1</option><option value="XButton2">Mouse XButton2</option></select>
+        <select class="select" :value="currentLauncher().mouse.modifiers" @change="commitLauncher({ mouse: { ...currentLauncher().mouse, modifiers: ($event.target as HTMLSelectElement).value } })"><option value="">无修饰键</option><option value="Ctrl">Ctrl</option><option value="Alt">Alt</option><option value="Shift">Shift</option><option value="Win">Win</option><option value="Ctrl+Shift">Ctrl + Shift</option><option value="Ctrl+Alt">Ctrl + Alt</option></select>
+      </div>
+      <label class="checkbox"><input type="checkbox" :checked="currentLauncher().mouse.consume" @change="commitLauncher({ mouse: { ...currentLauncher().mouse, consume: ($event.target as HTMLInputElement).checked } })"/><span>消费匹配的侧键事件（会阻止浏览器前进/后退）</span></label>
+      <div class="backup-row"><button class="btn" @click="openLauncher">{{ t("settings.openLauncher") }}</button><button class="btn" @click="onTestLauncher">测试 Launcher</button><button class="btn" @click="onReregister">重新注册</button></div>
       <p v-if="shortcutFeedback" class="feedback" :class="{ ok: !shortcutIsError }">
         {{ shortcutFeedback }}
       </p>
+      <div v-if="shortcutDiagnostics" class="diagnostics">
+        <div>主快捷键：{{ shortcutDiagnostics.primary.binding ?? "关闭" }} · {{ shortcutDiagnostics.primary.state }}</div>
+        <div>备用快捷键：{{ shortcutDiagnostics.secondary.binding ?? "关闭" }} · {{ shortcutDiagnostics.secondary.state }}</div>
+        <div>鼠标：{{ shortcutDiagnostics.mouse.binding ?? "关闭" }} · {{ shortcutDiagnostics.mouse.state }}</div>
+        <div>最近输入：{{ shortcutDiagnostics.lastInputAt ?? "尚未收到" }} <span v-if="shortcutDiagnostics.lastInputSource">({{ shortcutDiagnostics.lastInputSource }})</span></div>
+        <div>最近显示：{{ shortcutDiagnostics.lastLauncherResult ?? "尚未测试" }}<span v-if="shortcutDiagnostics.lastLauncherDurationMs !== null"> · {{ shortcutDiagnostics.lastLauncherDurationMs }} ms</span></div>
+        <div v-if="shortcutDiagnostics.primary.lastError || shortcutDiagnostics.secondary.lastError || shortcutDiagnostics.mouse.lastError" class="feedback">最近错误：{{ shortcutDiagnostics.primary.lastError || shortcutDiagnostics.secondary.lastError || shortcutDiagnostics.mouse.lastError }}</div>
+        <p class="hint">{{ shortcutDiagnostics.registrationEvidenceNote }}</p>
+      </div>
     </div>
 
     <div class="group">
@@ -476,4 +532,7 @@ input {
 .feedback.ok {
   color: var(--accent);
 }
+
+.diagnostics { padding: 9px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-dim); font-size: 11px; line-height: 1.65; }
+.hint { margin: 0; color: var(--text-faint); font-size: 11px; }
 </style>

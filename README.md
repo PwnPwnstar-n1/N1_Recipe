@@ -12,6 +12,8 @@ commands, curl / HTTP templates and more. All data stays on your machine.
 - Search across title, aliases, tags, category and content
 - Template variables (`{{name}}`) with system variables (`{{datetime}}`, `{{clipboard}}`, …)
 - Global Quick Launcher — search and copy from anywhere
+- Independent primary and backup global shortcuts with conflict diagnostics and bounded recovery
+- Optional Mouse XButton1/XButton2 launcher bindings with modifiers and matched-event consume control
 - Desktop Edge Dock — hover-to-expand panel pinned to a screen edge
 - zh-CN / en-US
 - JSON Backup / Restore (Settings → Data)
@@ -39,6 +41,10 @@ Ctrl + Alt + Space
 ```
 
 opens / closes the Quick Launcher.
+
+The primary shortcut can be changed with the in-app recorder. Settings also
+support an independent backup shortcut, optional mouse side-button binding,
+registration diagnostics, Launcher testing, and manual re-registration.
 
 ## Data directory
 

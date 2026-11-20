@@ -79,6 +79,9 @@ export interface Settings {
   launcher: {
     enabled: boolean;
     shortcut: string;
+    secondaryEnabled: boolean;
+    secondaryShortcut: string;
+    mouse: { enabled: boolean; button: "XButton1" | "XButton2"; modifiers: string; consume: boolean };
   };
   dock: {
     enabled: boolean;
@@ -103,10 +106,7 @@ export function setLanguage(language: string): Promise<Settings> {
   return call<Settings>("set_language", { language });
 }
 
-export function updateLauncherSettings(launcher: {
-  enabled: boolean;
-  shortcut: string;
-}): Promise<Settings> {
+export function updateLauncherSettings(launcher: Settings["launcher"]): Promise<Settings> {
   return call<Settings>("update_launcher_settings", { launcher });
 }
 
@@ -149,6 +149,12 @@ export function showLauncher(): Promise<void> {
 export function hideLauncher(): Promise<void> {
   return call<void>("hide_launcher");
 }
+export type RegistrationState = "disabled" | "registering" | "registered" | "conflict" | "registrationFailed" | "recovering" | "unsupported";
+export interface BindingDiagnostic { binding: string | null; state: RegistrationState; lastError: string | null }
+export interface ShortcutDiagnostics { primary: BindingDiagnostic; secondary: BindingDiagnostic; mouse: BindingDiagnostic; lastInputAt: string | null; lastInputSource: string | null; lastLauncherResult: string | null; lastLauncherDurationMs: number | null; registrationEvidenceNote: string }
+export const getShortcutDiagnostics=()=>call<ShortcutDiagnostics>("get_shortcut_diagnostics");
+export const reregisterShortcuts=()=>call<ShortcutDiagnostics>("reregister_shortcuts");
+export const testLauncher=()=>call<ShortcutDiagnostics>("test_launcher");
 export interface PackPreview{package:{id:string;name:string;version:string;description:string;author:string;homepage:string};categoryCount:number;recipeCount:number;textCount:number;commandGroupCount:number;types:string[];tags:string[];conflicts:number}
 export interface PackImportResult{added:number;updated:number;skipped:number;failed:number;categoriesAdded:number;categoriesReused:number}
 export const previewRecipePack=(path:string)=>call<PackPreview>("preview_recipe_pack",{path});
